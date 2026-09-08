@@ -1,0 +1,419 @@
+package com.example.galeria.features.vault.presentation
+
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.galeria.core.encryption.DerivedKey
+import com.example.galeria.features.vault.domain.ExportFromVaultUseCase
+import com.example.galeria.features.vault.domain.LockMethod
+import com.example.galeria.features.vault.domain.SetupLockUseCase
+import com.example.galeria.features.vault.domain.UnlockVaultUseCase
+import com.example.galeria.features.vault.domain.VaultItem
+import com.example.galeria.features.vault.domain.VaultMediaKind
+import com.example.galeria.features.vault.domain.VaultRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
+
+sealed class VaultUiState {
+    data object Loading : VaultUiState()
+    data object NeedsSetup : VaultUiState()
+    data class Locked(
+        val method: LockMethod,
+        val biometricAvailable: Boolean,
+        val biometricEnabled: Boolean,
+        val pinFallback: Boolean = false,
+        val busy: Boolean = false,
+        val error: String? = null,
+    ) : VaultUiState()
+    data class Unlocked(
+        val items: List<VaultItem>,
+        val offerBiometric: Boolean = false,
+        val message: String? = null,
+        val openedCollection: String? = null,
+    ) : VaultUiState()
+    data class Viewing(
+        val item: VaultItem,
+        val items: List<VaultItem>,
+        val image: ImageBitmap? = null,
+        val playbackUri: String? = null,
+        val busy: Boolean = false,
+        val error: String? = null,
+        val openedCollection: String? = null,
+    ) : VaultUiState()
+}
+
+class VaultLockViewModel(
+    private val repository: VaultRepository,
+    private val biometric: BiometricUnlock,
+) : ViewModel() {
+
+    private val setupLock = SetupLockUseCase(repository)
+    private val unlockVault = UnlockVaultUseCase(repository)
+    private val exportFromVault = ExportFromVaultUseCase(repository)
+
+    private val _state = MutableStateFlow<VaultUiState>(VaultUiState.Loading)
+    val state: StateFlow<VaultUiState> = _state.asStateFlow()
+    private var playbackTempPath: String? = null
+    private val thumbSlots = Semaphore(2)
+    private val thumbCache = LinkedHashMap<String, ImageBitmap>(16, 0.75f, true)
+
+    init {
+        refresh()
+    }
+
+    fun refresh() {
+        _state.value = when {
+            !repository.isLockConfigured() -> VaultUiState.NeedsSetup
+            !repository.isUnlocked() -> lockedState()
+            else -> unlockedState()
+        }
+    }
+
+    fun setupPin(pin: CharArray) {
+        _state.value = VaultUiState.Loading
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.Default) { setupLock.setupPin(pin) }
+                _state.value = unlockedState(offerBiometric = biometric.isAvailable())
+            } catch (_: Exception) {
+                _state.value = VaultUiState.NeedsSetup
+            } finally {
+                pin.fill('\u0000')
+            }
+        }
+    }
+
+    fun setupPattern(cells: IntArray) {
+        _state.value = VaultUiState.Loading
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.Default) { setupLock.setupPattern(cells) }
+                _state.value = unlockedState(offerBiometric = biometric.isAvailable())
+            } catch (_: Exception) {
+                _state.value = VaultUiState.NeedsSetup
+            }
+        }
+    }
+
+    fun unlockWithPin(pin: CharArray) {
+        val current = _state.value as? VaultUiState.Locked ?: return
+        biometric.cancel()
+        _state.value = current.copy(busy = true, error = null, pinFallback = true)
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.Default) { unlockVault.unlockWithPin(pin) }
+            pin.fill('\u0000')
+            if (ok) {
+                _state.value = unlockedState(offerBiometric = shouldOfferBiometric())
+            } else {
+                _state.value = current.copy(busy = false, error = "PIN incorrecto")
+            }
+        }
+    }
+
+    fun unlockWithPattern(cells: IntArray) {
+        val current = _state.value as? VaultUiState.Locked ?: return
+        biometric.cancel()
+        _state.value = current.copy(busy = true, error = null, pinFallback = true)
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.Default) { unlockVault.unlockWithPattern(cells) }
+            if (ok) {
+                _state.value = unlockedState(offerBiometric = shouldOfferBiometric())
+            } else {
+                _state.value = current.copy(busy = false, error = "Patrón incorrecto")
+            }
+        }
+    }
+
+    fun unlockWithBiometric() {
+        val current = _state.value as? VaultUiState.Locked ?: return
+        if (!biometric.isAvailable()) {
+            _state.value = current.copy(
+                busy = false,
+                pinFallback = true,
+                error = "No hay huella en este dispositivo",
+            )
+            return
+        }
+        biometric.cancel()
+        _state.value = current.copy(busy = true, error = null)
+        val wrapped = repository.biometricWrappedDek() ?: byteArrayOf()
+        biometric.unwrap(wrapped) { result ->
+            viewModelScope.launch {
+                try {
+                    if (_state.value !is VaultUiState.Locked) return@launch
+                    val ok = result != null && withContext(Dispatchers.Default) {
+                        if (result.size == DerivedKey.SIZE_BYTES) {
+                            repository.unlockWithDek(result)
+                        } else {
+                            repository.unlockWithStoredDeviceKey()
+                        }
+                    }
+                    if (ok) {
+                        _state.value = unlockedState()
+                    } else {
+                        _state.value = lockedState(
+                            error = "No se pudo usar la huella. Entra con el PIN.",
+                            pinFallback = true,
+                        )
+                    }
+                } catch (_: Exception) {
+                    _state.value = lockedState(
+                        error = "No se pudo usar la huella. Entra con el PIN.",
+                        pinFallback = true,
+                    )
+                } finally {
+                    result?.fill(0)
+                }
+            }
+        }
+    }
+
+    fun cancelBiometricPrompt() {
+        biometric.cancel()
+        val current = _state.value as? VaultUiState.Locked ?: return
+        if (current.busy) {
+            _state.value = current.copy(busy = false)
+        }
+    }
+
+    fun enableBiometric() {
+        val dek = repository.copySessionDek() ?: return
+        try {
+            biometric.wrap(dek) { wrapped ->
+                dek.fill(0)
+                viewModelScope.launch {
+                    try {
+                        if (wrapped != null) {
+                            repository.storeBiometricWrappedDek(wrapped)
+                            _state.value = unlockedState(message = "Huella activada")
+                        } else {
+                            _state.value = unlockedState(message = "No se pudo activar la huella. El PIN sigue activo.")
+                        }
+                    } catch (_: Exception) {
+                        _state.value = unlockedState(message = "No se pudo activar la huella. El PIN sigue activo.")
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            dek.fill(0)
+            _state.value = unlockedState(message = "No se pudo activar la huella. El PIN sigue activo.")
+        }
+    }
+
+    fun usePinFallback() {
+        biometric.cancel()
+        val current = _state.value as? VaultUiState.Locked ?: return
+        _state.value = current.copy(pinFallback = true, error = null, busy = false)
+    }
+
+    fun skipBiometric() {
+        val current = _state.value as? VaultUiState.Unlocked ?: return
+        _state.value = current.copy(offerBiometric = false)
+    }
+
+    fun openItem(item: VaultItem, collection: List<VaultItem> = emptyList()) {
+        val current = _state.value as? VaultUiState.Unlocked ?: return
+        val pages = collection.ifEmpty { current.items }
+        openFromList(item, pages, current.openedCollection)
+    }
+
+    fun openCollection(title: String) {
+        val current = _state.value as? VaultUiState.Unlocked ?: return
+        if (vaultCollectionByTitle(current.items, title) == null) return
+        _state.value = current.copy(openedCollection = title)
+    }
+
+    fun closeCollection() {
+        val current = _state.value as? VaultUiState.Unlocked ?: return
+        _state.value = current.copy(openedCollection = null)
+    }
+
+    fun showItemAt(index: Int) {
+        val current = _state.value as? VaultUiState.Viewing ?: return
+        val item = current.items.getOrNull(index) ?: return
+        if (item.id == current.item.id) return
+        openFromList(item, current.items, current.openedCollection)
+    }
+
+    suspend fun loadThumbnail(item: VaultItem): ImageBitmap? = withContext(Dispatchers.Default) {
+        cachedThumb(item.id.value)?.let { return@withContext it }
+        thumbSlots.withPermit {
+            cachedThumb(item.id.value)?.let { return@withPermit it }
+            val jpeg = try {
+                repository.readOrCreateThumbnail(item)
+            } catch (_: Exception) {
+                null
+            } ?: return@withPermit null
+            try {
+                val image = try {
+                    decodeVaultImage(jpeg)
+                } catch (_: Exception) {
+                    null
+                }
+                if (image != null) storeThumb(item.id.value, image)
+                image
+            } finally {
+                jpeg.fill(0)
+            }
+        }
+    }
+
+    private fun openFromList(
+        item: VaultItem,
+        items: List<VaultItem>,
+        openedCollection: String?,
+    ) {
+        viewModelScope.launch {
+            val bytes = withContext(Dispatchers.Default) {
+                runCatching { repository.readDecrypted(item.id) }.getOrNull()
+            }
+            val image = withContext(Dispatchers.Default) {
+                when {
+                    item.mediaKind == VaultMediaKind.IMAGE && bytes != null ->
+                        runCatching { decodeVaultImage(bytes) }.getOrNull()
+                    else -> loadThumbnail(item)
+                }
+            }
+            val playbackUri = if (item.mediaKind == VaultMediaKind.VIDEO && bytes != null) {
+                withContext(Dispatchers.Default) {
+                    runCatching {
+                        writeTempPlayableVideo(item.id.value, item.displayName, bytes)
+                    }.getOrNull()
+                }
+            } else {
+                null
+            }
+            bytes?.fill(0)
+            replacePlaybackTemp(playbackUri)
+            _state.value = VaultUiState.Viewing(
+                item = item,
+                items = items,
+                image = image,
+                playbackUri = playbackUri,
+                openedCollection = openedCollection,
+            )
+        }
+    }
+
+    fun closeViewer() {
+        val current = _state.value as? VaultUiState.Viewing ?: return
+        replacePlaybackTemp(null)
+        _state.value = unlockedState(openedCollection = current.openedCollection)
+    }
+
+    fun exportCurrent() {
+        val current = _state.value as? VaultUiState.Viewing ?: return
+        _state.value = current.copy(busy = true, error = null)
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.Default) { exportFromVault(current.item.id) }
+                replacePlaybackTemp(null)
+                _state.value = unlockedState(
+                    message = "Exportado a la galería pública",
+                    openedCollection = current.openedCollection,
+                )
+            } catch (_: Exception) {
+                _state.value = current.copy(busy = false, error = "Error al exportar")
+            }
+        }
+    }
+
+    fun lockVault() {
+        try {
+            biometric.cancel()
+            replacePlaybackTemp(null)
+            clearThumbs()
+            if (repository.resetLockIfEmpty()) {
+                _state.value = VaultUiState.NeedsSetup
+            } else {
+                repository.lock()
+                _state.value = if (repository.isLockConfigured()) {
+                    lockedState()
+                } else {
+                    VaultUiState.NeedsSetup
+                }
+            }
+        } catch (_: Exception) {
+            runCatching { repository.lock() }
+            _state.value = if (repository.isLockConfigured()) {
+                lockedState()
+            } else {
+                VaultUiState.NeedsSetup
+            }
+        }
+    }
+
+    override fun onCleared() {
+        runCatching { lockVault() }
+        super.onCleared()
+    }
+
+    private fun replacePlaybackTemp(path: String?) {
+        playbackTempPath?.let { previous ->
+            if (previous != path) runCatching { deleteTempPlayableVideo(previous) }
+        }
+        playbackTempPath = path
+    }
+
+    private fun shouldOfferBiometric(): Boolean =
+        biometric.isAvailable() && !repository.isBiometricEnabled()
+
+    private fun lockedState(
+        error: String? = null,
+        pinFallback: Boolean? = null,
+    ): VaultUiState.Locked {
+        val available = biometric.isAvailable()
+        val canUseFingerprint = available &&
+            (repository.isBiometricEnabled() || repository.canHideWithoutUnlock())
+        return VaultUiState.Locked(
+            method = repository.configuredLockMethod() ?: LockMethod.PIN,
+            biometricAvailable = available,
+            biometricEnabled = canUseFingerprint,
+            pinFallback = pinFallback ?: false,
+            error = error,
+        )
+    }
+
+    private fun unlockedState(
+        offerBiometric: Boolean = false,
+        message: String? = null,
+        openedCollection: String? = null,
+    ): VaultUiState {
+        return try {
+            val items = repository.listItems()
+            val keptCollection = openedCollection
+                ?.takeIf { vaultCollectionByTitle(items, it) != null }
+            VaultUiState.Unlocked(
+                items = items,
+                offerBiometric = offerBiometric,
+                message = message,
+                openedCollection = keptCollection,
+            )
+        } catch (_: Exception) {
+            repository.lock()
+            lockedState(error = "No se pudo abrir el Vault")
+        }
+    }
+
+    private fun cachedThumb(id: String): ImageBitmap? = synchronized(thumbCache) { thumbCache[id] }
+
+    private fun storeThumb(id: String, image: ImageBitmap) {
+        synchronized(thumbCache) {
+            if (thumbCache.size >= 24) {
+                val oldest = thumbCache.keys.firstOrNull()
+                if (oldest != null) thumbCache.remove(oldest)
+            }
+            thumbCache[id] = image
+        }
+    }
+
+    private fun clearThumbs() {
+        synchronized(thumbCache) { thumbCache.clear() }
+    }
+}

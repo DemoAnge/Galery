@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Galeria necesita acceso a tus fotos y videos para moverlos al Vault y para exportarlos.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Galeria necesita permiso para guardar en Fotos los elementos exportados del Vault.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Galeria usa Face ID solo como atajo para abrir el Vault. El PIN o patrón sigue siendo obligatorio.</string>
+</dict>
+</plist>
