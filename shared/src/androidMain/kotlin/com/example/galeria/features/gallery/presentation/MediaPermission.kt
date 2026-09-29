@@ -3,7 +3,6 @@ package com.example.galeria.features.gallery.presentation
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
-import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.example.galeria.core.AndroidAppContext
@@ -26,7 +25,7 @@ actual class MediaPermission actual constructor() {
             onResult(true)
             return
         }
-        val activity = AndroidAppContext.activity as? ComponentActivity ?: run {
+        val activity = AndroidAppContext.activity ?: run {
             onResult(false)
             return
         }

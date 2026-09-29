@@ -14,10 +14,8 @@ dependencies {
     implementation(project(":shared"))
 
     implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.fragment)
     implementation(libs.androidx.biometric)
 
-    implementation(libs.compose.uiToolingPreview)
     debugImplementation(libs.compose.uiTooling)
 }
 
@@ -26,7 +24,7 @@ android {
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.example.galeria"
+        applicationId = "com.drk"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
@@ -35,6 +33,11 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/LICENSE*"
+            excludes += "/META-INF/NOTICE*"
+            excludes += "/META-INF/*.version"
+            excludes += "DebugProbesKt.bin"
+            excludes += "kotlin-tooling-metadata.json"
         }
     }
     signingConfigs {

@@ -7,4 +7,5 @@ import com.example.galeria.features.vault.domain.VaultItem
  */
 expect class PublicMediaInserter() {
     fun insert(item: VaultItem, plaintext: ByteArray)
+    fun insertFromPath(item: VaultItem, path: String)
 }

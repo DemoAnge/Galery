@@ -1,19 +1,23 @@
 package com.example.galeria.features.vault.presentation
 
+import android.app.Activity
+import android.hardware.biometrics.BiometricPrompt as FrameworkBiometricPrompt
+import android.os.Build
+import android.os.CancellationSignal
 import android.os.Handler
 import android.os.Looper
+import androidx.annotation.RequiresApi
 import androidx.biometric.BiometricManager
-import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
 import com.example.galeria.core.AndroidAppContext
 
 actual class BiometricUnlock actual constructor() {
 
-    private var prompt: BiometricPrompt? = null
+    private var cancellation: CancellationSignal? = null
     private var authGeneration: Int = 0
 
     actual fun isAvailable(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return false
         val context = runCatching { AndroidAppContext.require() }.getOrNull() ?: return false
         val manager = BiometricManager.from(context)
         val authenticators =
@@ -42,9 +46,9 @@ actual class BiometricUnlock actual constructor() {
 
     actual fun cancel() {
         authGeneration += 1
-        val current = prompt
-        prompt = null
-        runCatching { current?.cancelAuthentication() }
+        val current = cancellation
+        cancellation = null
+        runCatching { current?.cancel() }
     }
 
     private fun authenticate(
@@ -56,53 +60,69 @@ actual class BiometricUnlock actual constructor() {
             onResult(false)
             return
         }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            onResult(false)
+            return
+        }
         if (Looper.myLooper() != Looper.getMainLooper()) {
             MainHandler.post { authenticate(title, subtitle, onResult) }
             return
         }
+        authenticateWithFramework(activity, title, subtitle, onResult)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.P)
+    private fun authenticateWithFramework(
+        activity: Activity,
+        title: String,
+        subtitle: String,
+        onResult: (Boolean) -> Unit,
+    ) {
         val generation = authGeneration + 1
         authGeneration = generation
-        runCatching { prompt?.cancelAuthentication() }
-        prompt = null
+        runCatching { cancellation?.cancel() }
+        cancellation = null
         try {
             val executor = ContextCompat.getMainExecutor(activity)
-            val next = BiometricPrompt(
-                activity,
+            val cancelSignal = CancellationSignal()
+            cancellation = cancelSignal
+            val builder = FrameworkBiometricPrompt.Builder(activity)
+                .setTitle(title)
+                .setSubtitle(subtitle)
+                .setNegativeButton("Usar PIN", executor) { _, _ -> }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                builder.setConfirmationRequired(false)
+            }
+            builder.build().authenticate(
+                cancelSignal,
                 executor,
-                object : BiometricPrompt.AuthenticationCallback() {
-                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                        if (generation != authGeneration) return
-                        prompt = null
-                        onResult(true)
+                object : FrameworkBiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(
+                        result: FrameworkBiometricPrompt.AuthenticationResult?,
+                    ) {
+                        finish(generation, true, onResult)
                     }
 
-                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                        if (generation != authGeneration) return
-                        prompt = null
-                        onResult(false)
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) {
+                        finish(generation, false, onResult)
                     }
                 },
             )
-            prompt = next
-            val info = BiometricPrompt.PromptInfo.Builder()
-                .setTitle(title)
-                .setSubtitle(subtitle)
-                .setNegativeButtonText("Usar PIN")
-                .setAllowedAuthenticators(
-                    BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                        BiometricManager.Authenticators.BIOMETRIC_WEAK,
-                )
-                .setConfirmationRequired(false)
-                .build()
-            next.authenticate(info)
         } catch (_: Exception) {
-            prompt = null
-            if (generation == authGeneration) onResult(false)
+            cancellation = null
+            finish(generation, false, onResult)
         }
     }
 
-    private fun usableActivity(): FragmentActivity? {
-        val activity = AndroidAppContext.activity as? FragmentActivity ?: return null
+    private fun finish(generation: Int, ok: Boolean, onResult: (Boolean) -> Unit) {
+        if (generation != authGeneration) return
+        authGeneration += 1
+        cancellation = null
+        onResult(ok)
+    }
+
+    private fun usableActivity(): Activity? {
+        val activity = AndroidAppContext.activity ?: return null
         if (activity.isFinishing || activity.isDestroyed) return null
         return activity
     }

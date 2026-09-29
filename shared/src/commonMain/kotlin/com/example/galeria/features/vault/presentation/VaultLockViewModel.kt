@@ -60,6 +60,7 @@ class VaultLockViewModel(
     private val _state = MutableStateFlow<VaultUiState>(VaultUiState.Loading)
     val state: StateFlow<VaultUiState> = _state.asStateFlow()
     private var playbackTempPath: String? = null
+    private var openGeneration: Int = 0
     private val thumbSlots = Semaphore(2)
     private val thumbCache = LinkedHashMap<String, ImageBitmap>(16, 0.75f, true)
 
@@ -269,40 +270,78 @@ class VaultLockViewModel(
         items: List<VaultItem>,
         openedCollection: String?,
     ) {
+        val generation = openGeneration + 1
+        openGeneration = generation
+        _state.value = VaultUiState.Viewing(
+            item = item,
+            items = items,
+            busy = item.mediaKind == VaultMediaKind.VIDEO,
+            openedCollection = openedCollection,
+        )
         viewModelScope.launch {
-            val bytes = withContext(Dispatchers.Default) {
-                runCatching { repository.readDecrypted(item.id) }.getOrNull()
-            }
-            val image = withContext(Dispatchers.Default) {
-                when {
-                    item.mediaKind == VaultMediaKind.IMAGE && bytes != null ->
-                        runCatching { decodeVaultImage(bytes) }.getOrNull()
-                    else -> loadThumbnail(item)
+            var playbackUri: String? = null
+            try {
+                val image = withContext(Dispatchers.Default) {
+                    if (item.mediaKind == VaultMediaKind.IMAGE) {
+                        val bytes = runCatching { repository.readDecrypted(item.id) }.getOrNull()
+                        try {
+                            bytes?.let { runCatching { decodeVaultImage(it) }.getOrNull() }
+                                ?: loadThumbnail(item)
+                        } finally {
+                            bytes?.fill(0)
+                        }
+                    } else {
+                        loadThumbnail(item)
+                    }
                 }
-            }
-            val playbackUri = if (item.mediaKind == VaultMediaKind.VIDEO && bytes != null) {
-                withContext(Dispatchers.Default) {
-                    runCatching {
-                        writeTempPlayableVideo(item.id.value, item.displayName, bytes)
-                    }.getOrNull()
+                if (generation != openGeneration) return@launch
+                playbackUri = if (item.mediaKind == VaultMediaKind.VIDEO) {
+                    withContext(Dispatchers.IO) {
+                        runCatching { repository.prepareVideoPlayback(item) }.getOrNull()
+                    }
+                } else {
+                    null
                 }
-            } else {
-                null
+                if (generation != openGeneration) {
+                    playbackUri?.let { path ->
+                        withContext(Dispatchers.IO) { runCatching { deleteTempPlayableVideo(path) } }
+                    }
+                    return@launch
+                }
+                replacePlaybackTemp(playbackUri)
+                _state.value = VaultUiState.Viewing(
+                    item = item,
+                    items = items,
+                    image = image,
+                    playbackUri = playbackUri,
+                    openedCollection = openedCollection,
+                    error = if (item.mediaKind == VaultMediaKind.VIDEO && playbackUri == null) {
+                        "No se pudo reproducir el video"
+                    } else {
+                        null
+                    },
+                )
+            } catch (_: Throwable) {
+                if (generation != openGeneration) {
+                    playbackUri?.let { path ->
+                        withContext(Dispatchers.IO) { runCatching { deleteTempPlayableVideo(path) } }
+                    }
+                    return@launch
+                }
+                replacePlaybackTemp(null)
+                _state.value = VaultUiState.Viewing(
+                    item = item,
+                    items = items,
+                    openedCollection = openedCollection,
+                    error = "No se pudo abrir",
+                )
             }
-            bytes?.fill(0)
-            replacePlaybackTemp(playbackUri)
-            _state.value = VaultUiState.Viewing(
-                item = item,
-                items = items,
-                image = image,
-                playbackUri = playbackUri,
-                openedCollection = openedCollection,
-            )
         }
     }
 
     fun closeViewer() {
         val current = _state.value as? VaultUiState.Viewing ?: return
+        openGeneration += 1
         replacePlaybackTemp(null)
         _state.value = unlockedState(openedCollection = current.openedCollection)
     }
@@ -327,6 +366,7 @@ class VaultLockViewModel(
     fun lockVault() {
         try {
             biometric.cancel()
+            openGeneration += 1
             replacePlaybackTemp(null)
             clearThumbs()
             if (repository.resetLockIfEmpty()) {
@@ -355,10 +395,13 @@ class VaultLockViewModel(
     }
 
     private fun replacePlaybackTemp(path: String?) {
-        playbackTempPath?.let { previous ->
-            if (previous != path) runCatching { deleteTempPlayableVideo(previous) }
-        }
+        val previous = playbackTempPath
         playbackTempPath = path
+        if (previous != null && previous != path) {
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching { deleteTempPlayableVideo(previous) }
+            }
+        }
     }
 
     private fun shouldOfferBiometric(): Boolean =

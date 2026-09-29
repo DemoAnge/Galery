@@ -1,6 +1,5 @@
 package com.example.galeria.core
 
-import android.app.Activity
 import android.content.Context
 import androidx.activity.ComponentActivity
 import java.util.concurrent.CopyOnWriteArrayList
@@ -10,7 +9,7 @@ object AndroidAppContext {
     private var app: Context? = null
 
     @Volatile
-    var activity: Activity? = null
+    var activity: ComponentActivity? = null
 
     private val resumeListeners = CopyOnWriteArrayList<() -> Unit>()
 
@@ -19,11 +18,17 @@ object AndroidAppContext {
     }
 
     fun attachUi(host: ComponentActivity) {
+        activity = host
         AndroidMediaConsent.bind(host)
     }
 
     fun detachUi(host: ComponentActivity) {
         AndroidMediaConsent.unbind(host)
+    }
+
+    fun onUiResumed(host: ComponentActivity) {
+        activity = host
+        notifyUiResumed()
     }
 
     fun addResumeListener(listener: () -> Unit) {

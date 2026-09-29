@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -39,7 +37,9 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -68,9 +68,13 @@ fun GalleryViewerScreen(
     onMoveToVault: () -> Unit,
     onAddToAlbum: () -> Unit,
 ) {
+    if (session.items.isEmpty()) {
+        LaunchedEffect(Unit) { onBack() }
+        return
+    }
     val pagerState = rememberPagerState(
-        initialPage = session.index,
-        pageCount = { session.items.size },
+        initialPage = session.index.coerceIn(0, session.items.lastIndex),
+        pageCount = { session.items.size.coerceAtLeast(1) },
     )
     LaunchedEffect(pagerState.settledPage) {
         onPageChanged(pagerState.settledPage)
@@ -88,6 +92,11 @@ fun GalleryViewerScreen(
     val dismiss = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val scrimAlpha = (1f - (abs(dismiss.value) / 600f)).coerceIn(0.25f, 1f)
+    LaunchedEffect(chromeVisible, item.id, confirmMove) {
+        if (!chromeVisible || confirmMove) return@LaunchedEffect
+        delay(3_000)
+        chromeVisible = false
+    }
 
     Box(
         modifier = Modifier
@@ -100,7 +109,7 @@ fun GalleryViewerScreen(
             userScrollEnabled = abs(dismiss.value) < 8f,
             beyondViewportPageCount = 0,
         ) { page ->
-            val pageItem = session.items[page]
+            val pageItem = session.items.getOrNull(page) ?: session.items.first()
             val active = page == pagerState.settledPage && abs(dismiss.value) < 8f
             ZoomablePage(
                 item = pageItem,
@@ -109,12 +118,18 @@ fun GalleryViewerScreen(
                 chromeVisible = chromeVisible,
                 enabled = abs(dismiss.value) < 8f,
                 onTap = { chromeVisible = !chromeVisible },
+                onDoubleTapShowChrome = { chromeVisible = true },
                 onVerticalDrag = { dy ->
-                    scope.launch { dismiss.snapTo(dismiss.value + dy) }
+                    if (!chromeVisible && dy < 0f) {
+                        chromeVisible = true
+                        scope.launch { dismiss.snapTo(0f) }
+                    } else if (dy > 0f || dismiss.value > 0f) {
+                        scope.launch { dismiss.snapTo((dismiss.value + dy).coerceAtLeast(0f)) }
+                    }
                 },
                 onVerticalDragEnd = {
                     scope.launch {
-                        if (abs(dismiss.value) > 140f) {
+                        if (dismiss.value > 140f) {
                             onBack()
                         } else {
                             dismiss.animateTo(0f, tween(180))
@@ -180,6 +195,7 @@ private fun ZoomablePage(
     chromeVisible: Boolean,
     enabled: Boolean,
     onTap: () -> Unit,
+    onDoubleTapShowChrome: () -> Unit,
     onVerticalDrag: (Float) -> Unit,
     onVerticalDragEnd: () -> Unit,
     modifier: Modifier = Modifier,
@@ -187,6 +203,12 @@ private fun ZoomablePage(
     val isVideo = item.mediaKind == GalleryMediaKind.VIDEO
     var scale by remember(item.id) { mutableFloatStateOf(1f) }
     var offset by remember(item.id) { mutableStateOf(Offset.Zero) }
+    val chromeVisibleState = rememberUpdatedState(chromeVisible)
+    val enabledState = rememberUpdatedState(enabled)
+    val onTapState = rememberUpdatedState(onTap)
+    val onDoubleTapShowChromeState = rememberUpdatedState(onDoubleTapShowChrome)
+    val onVerticalDragState = rememberUpdatedState(onVerticalDrag)
+    val onVerticalDragEndState = rememberUpdatedState(onVerticalDragEnd)
     val transformableState = rememberTransformableState { zoom, pan, _ ->
         scale = (scale * zoom).coerceIn(1f, 5f)
         offset = if (scale > 1.02f) offset + pan else Offset.Zero
@@ -195,32 +217,7 @@ private fun ZoomablePage(
         modifier = modifier
             .fillMaxSize()
             .then(
-                if (isVideo) {
-                    Modifier
-                } else {
-                    Modifier
-                        .pointerInput(item.id) {
-                            detectTapGestures(
-                                onTap = { onTap() },
-                                onDoubleTap = {
-                                    if (scale > 1.1f) {
-                                        scale = 1f
-                                        offset = Offset.Zero
-                                    } else {
-                                        scale = 2.4f
-                                    }
-                                },
-                            )
-                        }
-                        .pointerInput(item.id, scale, enabled) {
-                            if (!enabled || scale > 1.05f) return@pointerInput
-                            detectVerticalDragGestures(
-                                onDragEnd = onVerticalDragEnd,
-                                onVerticalDrag = { _, dragAmount -> onVerticalDrag(dragAmount) },
-                            )
-                        }
-                        .transformable(state = transformableState, enabled = enabled)
-                },
+                if (isVideo) Modifier else Modifier.transformable(state = transformableState, enabled = enabled),
             ),
         contentAlignment = Alignment.Center,
     ) {
@@ -245,13 +242,45 @@ private fun ZoomablePage(
                     item = item,
                     poster = image,
                     active = active,
-                    chromeVisible = chromeVisible,
                 )
             }
             else -> {
                 MediaThumb(item = item, modifier = Modifier.fillMaxSize())
             }
         }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(item.id) {
+                    detectTapGestures(
+                        onTap = { onTapState.value() },
+                        onDoubleTap = {
+                            if (!chromeVisibleState.value) {
+                                onDoubleTapShowChromeState.value()
+                            } else if (!isVideo) {
+                                if (scale > 1.1f) {
+                                    scale = 1f
+                                    offset = Offset.Zero
+                                } else {
+                                    scale = 2.4f
+                                }
+                            } else {
+                                onTapState.value()
+                            }
+                        },
+                    )
+                }
+                .pointerInput(item.id) {
+                    detectVerticalDragGestures(
+                        onDragEnd = { onVerticalDragEndState.value() },
+                        onDragCancel = { onVerticalDragEndState.value() },
+                        onVerticalDrag = { _, dragAmount ->
+                            if (!enabledState.value || scale > 1.05f) return@detectVerticalDragGestures
+                            onVerticalDragState.value(dragAmount)
+                        },
+                    )
+                },
+        )
     }
 }
 
@@ -260,26 +289,13 @@ private fun VideoPage(
     item: MediaItem,
     poster: androidx.compose.ui.graphics.ImageBitmap?,
     active: Boolean,
-    chromeVisible: Boolean,
 ) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         if (active) {
-            val ratio = item.tileAspectRatio()
             VideoPlayer(
                 uri = item.publicUri,
                 playWhenReady = true,
-                modifier = Modifier
-                    .padding(
-                        top = if (chromeVisible) 56.dp else 0.dp,
-                        bottom = if (chromeVisible) 72.dp else 0.dp,
-                    )
-                    .then(
-                        if (ratio >= 1f) {
-                            Modifier.fillMaxWidth().aspectRatio(ratio)
-                        } else {
-                            Modifier.fillMaxHeight().aspectRatio(ratio)
-                        },
-                    ),
+                modifier = Modifier.fillMaxSize(),
             )
         } else {
             if (poster != null) {

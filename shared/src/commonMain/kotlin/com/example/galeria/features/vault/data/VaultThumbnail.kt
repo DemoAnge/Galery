@@ -38,3 +38,9 @@ internal expect fun encodeVaultThumbnailJpeg(
     isVideo: Boolean,
     displayName: String,
 ): ByteArray?
+
+internal expect fun encodeVaultThumbnailFromPublicUri(
+    publicUri: String,
+    isVideo: Boolean,
+    displayName: String,
+): ByteArray?

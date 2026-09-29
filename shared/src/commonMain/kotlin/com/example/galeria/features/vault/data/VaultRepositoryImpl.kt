@@ -110,12 +110,27 @@ class VaultRepositoryImpl(
         val plaintexts = ArrayList<ByteArray>(sources.size)
         try {
             sources.forEach { source ->
-                val plaintext = publicMediaRemover.readBytes(source.publicUri)
-                plaintexts += plaintext
                 val itemId = newItemId()
-                val payload = encryptor.encrypt(plaintext, key)
-                fileStore.write(itemId.value, payload)
-                writeThumbnail(itemId.value, plaintext, source.mediaKind == VaultMediaKind.VIDEO, source.displayName, key)
+                val isVideo = source.mediaKind == VaultMediaKind.VIDEO
+                if (shouldStreamVaultMedia(source.mediaKind, source.sizeBytes)) {
+                    val jpeg = runCatching {
+                        encodeVaultThumbnailFromPublicUri(source.publicUri, isVideo, source.displayName)
+                    }.getOrNull()
+                    encryptPublicMediaToVault(itemId.value, source.publicUri, key)
+                    if (jpeg != null) {
+                        try {
+                            writeThumbnailBytes(vaultThumbnailFileId(itemId.value), jpeg, key)
+                        } finally {
+                            jpeg.fill(0)
+                        }
+                    }
+                } else {
+                    val plaintext = publicMediaRemover.readBytes(source.publicUri)
+                    plaintexts += plaintext
+                    val payload = encryptor.encrypt(plaintext, key)
+                    fileStore.write(itemId.value, payload)
+                    writeThumbnail(itemId.value, plaintext, isVideo, source.displayName, key)
+                }
                 created += VaultItem(
                     id = itemId,
                     displayName = source.displayName,
@@ -150,15 +165,19 @@ class VaultRepositoryImpl(
         val key = requireSession()
         val items = metadataStore.load(key)
         val item = items.firstOrNull { it.id == id } ?: error("Vault item not found")
-        val payload = fileStore.read(id.value)
-        val plaintext = encryptor.decrypt(payload, key)
-        try {
-            publicMediaInserter.insert(item, plaintext)
-            deleteItemFiles(id.value)
-            metadataStore.save(key, items.filter { it.id != id })
-        } finally {
-            plaintext.fill(0)
+        if (shouldStreamVaultMedia(item.mediaKind, item.sizeBytes)) {
+            exportDecryptedVaultItem(item, key)
+        } else {
+            val payload = fileStore.read(id.value)
+            val plaintext = encryptor.decrypt(payload, key)
+            try {
+                publicMediaInserter.insert(item, plaintext)
+            } finally {
+                plaintext.fill(0)
+            }
         }
+        deleteItemFiles(id.value)
+        metadataStore.save(key, items.filter { it.id != id })
     }
 
     override fun listItems(): List<VaultItem> {
@@ -168,7 +187,12 @@ class VaultRepositoryImpl(
 
     override fun readDecrypted(id: VaultItemId): ByteArray {
         val key = requireSession()
-        return encryptor.decrypt(fileStore.read(id.value), key)
+        return decryptVaultToPlaintext(id.value, key)
+    }
+
+    override fun prepareVideoPlayback(item: VaultItem): String {
+        val key = requireSession()
+        return decryptVaultToPlayablePath(item.id.value, item.displayName, key)
     }
 
     override fun readOrCreateThumbnail(item: VaultItem): ByteArray? {

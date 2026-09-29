@@ -57,7 +57,11 @@ fun VaultSetupScreen(
             modifier = Modifier.size(40.dp),
         )
         Spacer(Modifier.height(16.dp))
-        Text("Crear Vault", style = MaterialTheme.typography.headlineSmall)
+        Text(
+            "Crear Vault",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
         Text(
             "Primero un PIN de ${LockMethod.PIN_DIGITS} dígitos.",
             style = MaterialTheme.typography.bodyMedium,
@@ -79,7 +83,10 @@ fun VaultSetupScreen(
                 }
             }
             SetupStep.PinEnter -> {
-                Text("Elige un PIN de ${LockMethod.PIN_DIGITS} dígitos")
+                Text(
+                    "Elige un PIN de ${LockMethod.PIN_DIGITS} dígitos",
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
                 var pin by remember { mutableStateOf("") }
                 LaunchedEffect(pin) {
                     if (pin.length == LockMethod.PIN_DIGITS) {
@@ -97,7 +104,10 @@ fun VaultSetupScreen(
                 TextButton(onClick = { step = SetupStep.Choose; pin = "" }) { Text("Atrás") }
             }
             SetupStep.PinConfirm -> {
-                Text("Confirma el PIN de ${LockMethod.PIN_DIGITS} dígitos")
+                Text(
+                    "Confirma el PIN de ${LockMethod.PIN_DIGITS} dígitos",
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
                 var pin by remember { mutableStateOf("") }
                 LaunchedEffect(pin) {
                     if (pin.length != LockMethod.PIN_DIGITS) return@LaunchedEffect

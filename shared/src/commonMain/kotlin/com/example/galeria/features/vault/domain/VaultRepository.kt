@@ -43,6 +43,8 @@ interface VaultRepository {
 
     fun readDecrypted(id: VaultItemId): ByteArray
 
+    fun prepareVideoPlayback(item: VaultItem): String
+
     fun readOrCreateThumbnail(item: VaultItem): ByteArray?
 
     fun isBiometricEnabled(): Boolean

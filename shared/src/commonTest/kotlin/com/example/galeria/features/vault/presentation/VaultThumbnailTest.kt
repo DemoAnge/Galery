@@ -2,7 +2,9 @@ package com.example.galeria.features.vault.presentation
 
 import com.example.galeria.features.vault.data.canBackfillVaultThumbnail
 import com.example.galeria.features.vault.data.looksLikeStillImage
+import com.example.galeria.features.vault.data.shouldStreamVaultMedia
 import com.example.galeria.features.vault.data.vaultThumbnailFileId
+import com.example.galeria.features.vault.domain.VaultMediaKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -31,5 +33,12 @@ class VaultThumbnailTest {
         assertTrue(canBackfillVaultThumbnail(2L * 1024 * 1024))
         assertFalse(canBackfillVaultThumbnail(80L * 1024 * 1024))
         assertFalse(canBackfillVaultThumbnail(0L))
+    }
+
+    @Test
+    fun longVideosAndBigFilesUseStreamingCrypto() {
+        assertTrue(shouldStreamVaultMedia(VaultMediaKind.VIDEO, 1L))
+        assertTrue(shouldStreamVaultMedia(VaultMediaKind.IMAGE, 8L * 1024 * 1024))
+        assertFalse(shouldStreamVaultMedia(VaultMediaKind.IMAGE, 512L * 1024))
     }
 }

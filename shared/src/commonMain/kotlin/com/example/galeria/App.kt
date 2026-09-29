@@ -73,6 +73,7 @@ import com.example.galeria.features.vault.presentation.VaultLockViewModel
 import com.example.galeria.features.vault.presentation.VaultSetupScreen
 import com.example.galeria.features.vault.presentation.VaultUiState
 import com.example.galeria.features.vault.presentation.VaultUnlockScreen
+import com.example.galeria.features.vault.domain.VaultMediaKind
 import com.example.galeria.features.vault.presentation.VaultViewerScreen
 import com.example.galeria.ui.AccentsLavender
 import com.example.galeria.ui.AppBackHandler
@@ -185,10 +186,14 @@ fun App() {
             }
         }
         LaunchedEffect(vaultOpen, vaultState) {
+            val viewing = vaultState as? VaultUiState.Viewing
             val showingPrivate =
                 vaultOpen &&
-                    (vaultState is VaultUiState.Unlocked || vaultState is VaultUiState.Viewing)
-            setSensitiveWindow(showingPrivate)
+                    (vaultState is VaultUiState.Unlocked || viewing != null)
+            val playingVaultVideo = viewing != null &&
+                viewing.item.mediaKind == VaultMediaKind.VIDEO &&
+                viewing.playbackUri != null
+            setSensitiveWindow(showingPrivate && !playingVaultVideo)
         }
 
         val ready = galleryState as? GalleryUiState.Ready

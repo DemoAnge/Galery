@@ -11,6 +11,18 @@ import com.example.galeria.features.vault.domain.VaultMediaKind
 actual class PublicMediaInserter actual constructor() {
 
     actual fun insert(item: VaultItem, plaintext: ByteArray) {
+        writePublic(item) { output -> output.write(plaintext) }
+    }
+
+    actual fun insertFromPath(item: VaultItem, path: String) {
+        val file = java.io.File(path)
+        check(file.isFile) { "Public media insert failed" }
+        writePublic(item) { output ->
+            file.inputStream().buffered().use { input -> input.copyTo(output) }
+        }
+    }
+
+    private fun writePublic(item: VaultItem, write: (java.io.OutputStream) -> Unit) {
         val context = AndroidAppContext.require()
         val resolver = context.contentResolver
         val image = item.mediaKind == VaultMediaKind.IMAGE
@@ -31,7 +43,7 @@ actual class PublicMediaInserter actual constructor() {
         val uri = resolver.insert(collection, values) ?: error("Public media insert failed")
         try {
             val out = resolver.openOutputStream(uri) ?: error("Public media insert failed")
-            out.use { it.write(plaintext) }
+            out.use { write(it) }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 values.clear()
                 values.put(MediaStore.MediaColumns.IS_PENDING, 0)

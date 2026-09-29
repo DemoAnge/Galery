@@ -1,11 +1,14 @@
 package com.example.galeria.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -30,21 +33,21 @@ private val LightColors = lightColorScheme(
     onPrimaryContainer = Color(0xFF2A2140),
     secondary = Color(0xFF5F5A6B),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFF0ECF6),
+    secondaryContainer = Color(0xFFE8E2F4),
     onSecondaryContainer = Color(0xFF2A2140),
     background = Color(0xFFF7F5FB),
     onBackground = Color(0xFF1C1826),
     surface = Color(0xFFF7F5FB),
     onSurface = Color(0xFF1C1826),
     surfaceVariant = Color(0xFFE8E2F0),
-    onSurfaceVariant = Color(0xFF5F5A6B),
+    onSurfaceVariant = Color(0xFF534E60),
     surfaceContainer = Color(0xFFEEEAF4),
     surfaceContainerHigh = Color(0xFFE4DEEC),
-    surfaceContainerHighest = Color(0xFFD9D2E4),
+    surfaceContainerHighest = Color(0xFFD6CFE0),
     surfaceContainerLow = Color(0xFFF3F0F7),
-    outline = Color(0xFFD4CDE0),
-    outlineVariant = Color(0xFFE8E2F0),
-    error = Color(0xFFD93025),
+    outline = Color(0xFFC4BDD0),
+    outlineVariant = Color(0xFFDDD6E8),
+    error = Color(0xFFB3261E),
     onError = Color.White,
     inverseSurface = Color(0xFF2A2438),
     inverseOnSurface = Color(0xFFF3F0F7),
@@ -53,28 +56,28 @@ private val LightColors = lightColorScheme(
 
 private val DarkColors = darkColorScheme(
     primary = DarkPrimary,
-    onPrimary = Color(0xFF2A2140),
-    primaryContainer = Color(0xFF3D3358),
-    onPrimaryContainer = AccentsLavender,
-    secondary = Color(0xFFB8B0C8),
+    onPrimary = Color(0xFF1C1826),
+    primaryContainer = Color(0xFF4A3D6E),
+    onPrimaryContainer = Color(0xFFF3EEFF),
+    secondary = Color(0xFFD0C8DC),
     onSecondary = Color(0xFF1C1826),
-    secondaryContainer = Color(0xFF2E2A3C),
-    onSecondaryContainer = Color(0xFFE8E2F0),
-    background = Color(0xFF16141F),
-    onBackground = Color(0xFFF3F0F7),
-    surface = Color(0xFF16141F),
-    onSurface = Color(0xFFF3F0F7),
-    surfaceVariant = Color(0xFF2A2636),
-    onSurfaceVariant = Color(0xFFB8B0C8),
-    surfaceContainer = Color(0xFF1E1B28),
-    surfaceContainerHigh = Color(0xFF262232),
-    surfaceContainerHighest = Color(0xFF2E2A3C),
-    surfaceContainerLow = Color(0xFF1A1824),
-    outline = Color(0xFF4A4458),
-    outlineVariant = Color(0xFF2E2A3C),
-    error = Color(0xFFF28B82),
+    secondaryContainer = Color(0xFF3A3548),
+    onSecondaryContainer = Color(0xFFF0EAF8),
+    background = Color(0xFF14121C),
+    onBackground = Color(0xFFF6F3FB),
+    surface = Color(0xFF14121C),
+    onSurface = Color(0xFFF6F3FB),
+    surfaceVariant = Color(0xFF322E40),
+    onSurfaceVariant = Color(0xFFD2CBDC),
+    surfaceContainer = Color(0xFF1C1926),
+    surfaceContainerHigh = Color(0xFF2A2636),
+    surfaceContainerHighest = Color(0xFF3A3548),
+    surfaceContainerLow = Color(0xFF18161F),
+    outline = Color(0xFF8A8298),
+    outlineVariant = Color(0xFF4A4458),
+    error = Color(0xFFFFB4AB),
     onError = Color(0xFF3B0A0A),
-    inverseSurface = Color(0xFFF3F0F7),
+    inverseSurface = Color(0xFFF6F3FB),
     inverseOnSurface = Color(0xFF2A2438),
     inversePrimary = LightPrimary,
 )
@@ -158,9 +161,16 @@ fun GaleriaTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
+    val colors = if (darkTheme) DarkColors else LightColors
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
+        colorScheme = colors,
         typography = GaleriaTypography,
-        content = content,
-    )
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = colors.background,
+            contentColor = colors.onBackground,
+            content = content,
+        )
+    }
 }

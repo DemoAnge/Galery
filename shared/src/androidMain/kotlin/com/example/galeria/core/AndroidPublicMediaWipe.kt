@@ -2,10 +2,12 @@ package com.example.galeria.core
 
 import android.app.RecoverableSecurityException
 import android.content.ContentResolver
+import android.database.Cursor
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import androidx.annotation.RequiresApi
 import androidx.core.net.toUri
 import java.io.File
 import java.io.RandomAccessFile
@@ -30,7 +32,7 @@ internal object AndroidPublicMediaWipe {
         val leftovers = uris.map { uri -> uri to absolutePath(resolver, uri) }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            deleteWithSystemPrompt(resolver, uris)
+            deleteWithSystemPromptR(resolver, uris)
         } else {
             uris.forEach { deleteLegacy(resolver, it) }
         }
@@ -43,7 +45,8 @@ internal object AndroidPublicMediaWipe {
         }
     }
 
-    private fun deleteWithSystemPrompt(resolver: ContentResolver, uris: List<Uri>) {
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun deleteWithSystemPromptR(resolver: ContentResolver, uris: List<Uri>) {
         val existing = uris.filter { exists(resolver, it) }
         if (existing.isEmpty()) return
         existing.groupBy(::deleteGroupKey).values.forEach { group ->
@@ -51,9 +54,9 @@ internal object AndroidPublicMediaWipe {
                 try {
                     val request = MediaStore.createDeleteRequest(resolver, chunk)
                     val granted = AndroidMediaConsent.request(request.intentSender)
-                    check(granted) { "Public media delete denied" }
+                    check(granted) { DELETE_DENIED }
                 } catch (error: Exception) {
-                    if (error.message == "Public media delete denied") throw error
+                    if (error.message == DELETE_DENIED) throw error
                     chunk.forEach { uri -> fallbackDelete(resolver, uri) }
                 }
             }
@@ -68,7 +71,7 @@ internal object AndroidPublicMediaWipe {
             recoverAndDelete(resolver, uri, error)
             return
         }
-        error("Public media delete failed")
+        error(DELETE_FAILED)
     }
 
     private fun fallbackDelete(resolver: ContentResolver, uri: Uri) {
@@ -79,7 +82,7 @@ internal object AndroidPublicMediaWipe {
             recoverAndDelete(resolver, uri, error)
             return
         }
-        error("Public media delete failed")
+        error(DELETE_FAILED)
     }
 
     private fun recoverAndDelete(
@@ -87,25 +90,39 @@ internal object AndroidPublicMediaWipe {
         uri: Uri,
         error: SecurityException,
     ) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || error !is RecoverableSecurityException) {
-            throw error
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && error is RecoverableSecurityException) {
+            recoverFromUserAction(resolver, uri, error)
+            return
         }
+        throw error
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun recoverFromUserAction(
+        resolver: ContentResolver,
+        uri: Uri,
+        error: RecoverableSecurityException,
+    ) {
         val sender = error.userAction.actionIntent.intentSender
         val granted = AndroidMediaConsent.request(sender)
-        check(granted) { "Public media delete denied" }
+        check(granted) { DELETE_DENIED }
         val rows = resolver.delete(uri, null, null)
-        check(rows > 0) { "Public media delete failed" }
+        check(rows > 0) { DELETE_FAILED }
     }
 
     private fun deleteGroupKey(uri: Uri): String {
         val volume = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            runCatching { MediaStore.getVolumeName(uri) }.getOrNull()
+            volumeNameQ(uri)
         } else {
             null
         } ?: uri.pathSegments.firstOrNull().orEmpty()
         val kind = if (uri.toString().contains("/video", ignoreCase = true)) "v" else "i"
         return "$volume:$kind"
     }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun volumeNameQ(uri: Uri): String? =
+        runCatching { MediaStore.getVolumeName(uri) }.getOrNull()
 
     private fun exists(resolver: ContentResolver, uri: Uri): Boolean {
         return try {
@@ -118,11 +135,14 @@ internal object AndroidPublicMediaWipe {
 
     @Suppress("DEPRECATION")
     private fun absolutePath(resolver: ContentResolver, uri: Uri): String? {
-        val projection = arrayOf(
-            MediaStore.MediaColumns.DATA,
-            MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns.RELATIVE_PATH,
-        )
+        val projection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            pathProjectionQ()
+        } else {
+            arrayOf(
+                MediaStore.MediaColumns.DATA,
+                MediaStore.MediaColumns.DISPLAY_NAME,
+            )
+        }
         return try {
             resolver.query(uri, projection, null, null, null)?.use { cursor ->
                 if (!cursor.moveToFirst()) return@use null
@@ -131,16 +151,32 @@ internal object AndroidPublicMediaWipe {
                     val data = cursor.getString(dataIndex)
                     if (!data.isNullOrBlank()) return@use data
                 }
-                val nameIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
-                val relativeIndex = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
-                val name = if (nameIndex >= 0) cursor.getString(nameIndex) else null
-                val relative = if (relativeIndex >= 0) cursor.getString(relativeIndex) else null
-                if (name.isNullOrBlank() || relative.isNullOrBlank()) null
-                else "/storage/emulated/0/${relative.trimEnd('/')}/$name"
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    pathFromRelativeQ(cursor)
+                } else {
+                    null
+                }
             }
         } catch (_: Exception) {
             null
         }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun pathProjectionQ(): Array<String> = arrayOf(
+        MediaStore.MediaColumns.DATA,
+        MediaStore.MediaColumns.DISPLAY_NAME,
+        MediaStore.MediaColumns.RELATIVE_PATH,
+    )
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun pathFromRelativeQ(cursor: Cursor): String? {
+        val nameIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+        val relativeIndex = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
+        val name = if (nameIndex >= 0) cursor.getString(nameIndex) else null
+        val relative = if (relativeIndex >= 0) cursor.getString(relativeIndex) else null
+        if (name.isNullOrBlank() || relative.isNullOrBlank()) return null
+        return "/storage/emulated/0/${relative.trimEnd('/')}/$name"
     }
 
     private fun shred(path: String?) {
@@ -166,4 +202,7 @@ internal object AndroidPublicMediaWipe {
             runCatching { file.delete() }
         }
     }
+
+    private const val DELETE_DENIED = "Public media delete denied"
+    private const val DELETE_FAILED = "Public media delete failed"
 }

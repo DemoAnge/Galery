@@ -17,6 +17,40 @@ import platform.UIKit.UIImageJPEGRepresentation
 import platform.posix.memcpy
 
 @OptIn(ExperimentalForeignApi::class)
+internal actual fun encodeVaultThumbnailFromPublicUri(
+    publicUri: String,
+    isVideo: Boolean,
+    displayName: String,
+): ByteArray? {
+    return try {
+        val fetch = platform.Photos.PHAsset.fetchAssetsWithLocalIdentifiers(listOf(publicUri), null)
+        val asset = fetch.firstObject as? platform.Photos.PHAsset ?: return null
+        val options = platform.Photos.PHImageRequestOptions().apply {
+            setSynchronous(true)
+            setNetworkAccessAllowed(true)
+            setResizeMode(platform.Photos.PHImageRequestOptionsResizeModeExact)
+            setDeliveryMode(platform.Photos.PHImageRequestOptionsDeliveryModeHighQualityFormat)
+        }
+        val size = VAULT_THUMB_MAX_EDGE.toDouble()
+        val semaphore = platform.darwin.dispatch_semaphore_create(0)
+        var jpeg: ByteArray? = null
+        platform.Photos.PHImageManager.defaultManager.requestImageForAsset(
+            asset,
+            targetSize = CGSizeMake(size, size),
+            contentMode = platform.Photos.PHImageContentModeAspectFit,
+            options = options,
+        ) { image, _ ->
+            val uiImage = image as? UIImage
+            jpeg = uiImage?.let { jpegBytes(it) }
+            platform.darwin.dispatch_semaphore_signal(semaphore)
+        }
+        platform.darwin.dispatch_semaphore_wait(semaphore, platform.darwin.DISPATCH_TIME_FOREVER)
+        jpeg
+    } catch (_: Throwable) {
+        null
+    }
+}
+
 internal actual fun encodeVaultThumbnailJpeg(
     plaintext: ByteArray,
     isVideo: Boolean,

@@ -53,14 +53,19 @@ actual fun VideoMutePreview(
             }
         },
         update = { view ->
-            if (playing) {
-                if (!view.isPlaying) view.start()
-            } else if (view.isPlaying) {
-                view.pause()
+            runCatching {
+                if (playing) {
+                    if (!view.isPlaying) view.start()
+                } else if (view.isPlaying) {
+                    view.pause()
+                }
             }
         },
         onRelease = { view ->
-            view.stopPlayback()
+            runCatching {
+                view.setOnPreparedListener(null)
+                view.stopPlayback()
+            }
         },
         modifier = modifier,
     )

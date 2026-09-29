@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.border
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,7 +56,11 @@ fun VaultUnlockScreen(
             modifier = Modifier.size(48.dp),
         )
         Spacer(Modifier.height(16.dp))
-        Text("Vault", style = MaterialTheme.typography.headlineSmall)
+        Text(
+            "Vault",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
         Text(
             when {
                 canUseFingerprint && state.method == LockMethod.PIN ->
@@ -139,17 +144,16 @@ internal fun VaultPinPad(
     onChange: (String) -> Unit,
     onSubmit: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         repeat(LockMethod.PIN_DIGITS) { index ->
             val filled = index < value.length
             Box(
                 modifier = Modifier
-                    .size(12.dp)
+                    .size(14.dp)
                     .clip(CircleShape)
-                    .background(
-                        if (filled) MaterialTheme.colorScheme.onSurface
-                        else MaterialTheme.colorScheme.outline,
-                    ),
+                    .background(if (filled) scheme.primary else scheme.surfaceContainerHighest)
+                    .border(1.dp, scheme.outline, CircleShape),
             )
         }
     }
@@ -167,6 +171,14 @@ internal fun VaultPinPad(
                     modifier = Modifier
                         .size(72.dp)
                         .clip(CircleShape)
+                        .background(
+                            if (label.isEmpty()) scheme.background
+                            else scheme.surfaceContainerHighest,
+                        )
+                        .then(
+                            if (label.isEmpty()) Modifier
+                            else Modifier.border(1.dp, scheme.outline, CircleShape),
+                        )
                         .clickable(enabled = enabled && label.isNotEmpty()) {
                             when (label) {
                                 "⌫" -> if (value.isNotEmpty()) onChange(value.dropLast(1))
@@ -178,7 +190,11 @@ internal fun VaultPinPad(
                     contentAlignment = Alignment.Center,
                 ) {
                     if (label.isNotEmpty()) {
-                        Text(label, style = MaterialTheme.typography.headlineSmall)
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = scheme.onSurface,
+                        )
                     }
                 }
             }
@@ -198,14 +214,13 @@ internal fun VaultPatternPad(
                 repeat(3) { col ->
                     val index = row * 3 + col
                     val isOn = index in selected
+                    val scheme = MaterialTheme.colorScheme
                     Box(
                         modifier = Modifier
                             .size(64.dp)
                             .clip(CircleShape)
-                            .background(
-                                if (isOn) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.surfaceVariant,
-                            )
+                            .background(if (isOn) scheme.primary else scheme.surfaceContainerHighest)
+                            .border(1.dp, if (isOn) scheme.primary else scheme.outline, CircleShape)
                             .clickable(enabled = enabled) {
                                 if (index !in selected) onChange(selected + index)
                             },
@@ -214,7 +229,8 @@ internal fun VaultPatternPad(
                         if (isOn) {
                             Text(
                                 "${selected.indexOf(index) + 1}",
-                                color = MaterialTheme.colorScheme.onPrimary,
+                                color = scheme.onPrimary,
+                                style = MaterialTheme.typography.titleMedium,
                             )
                         }
                     }

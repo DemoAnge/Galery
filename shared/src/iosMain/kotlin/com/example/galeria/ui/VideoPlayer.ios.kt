@@ -80,7 +80,7 @@ actual fun VideoPlayer(
             factory = {
                 AVPlayerViewController().apply {
                     this.player = player
-                    showsPlaybackControls = true
+                    showsPlaybackControls = false
                     videoGravity = AVLayerVideoGravityResizeAspect
                     view.backgroundColor = UIColor.blackColor
                 }

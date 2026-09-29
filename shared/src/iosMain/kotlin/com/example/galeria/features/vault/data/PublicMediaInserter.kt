@@ -24,11 +24,26 @@ import platform.Photos.PHPhotoLibrary
 actual class PublicMediaInserter actual constructor() {
 
     actual fun insert(item: VaultItem, plaintext: ByteArray) {
+        insertResource(item) { request, type ->
+            request.addResourceWithType(type, data = plaintext.toNSData(), options = null)
+        }
+    }
+
+    actual fun insertFromPath(item: VaultItem, path: String) {
+        val url = platform.Foundation.NSURL.fileURLWithPath(path)
+        insertResource(item) { request, type ->
+            request.addResourceWithType(type, fileURL = url, options = null)
+        }
+    }
+
+    private fun insertResource(
+        item: VaultItem,
+        add: (PHAssetCreationRequest, platform.Photos.PHAssetResourceType) -> Unit,
+    ) {
         val status = PHPhotoLibrary.authorizationStatus()
         check(
             status == PHAuthorizationStatusAuthorized || status == PHAuthorizationStatusLimited,
         ) { "Photos access not granted" }
-        val data = plaintext.toNSData()
         val resourceType = if (item.mediaKind == VaultMediaKind.IMAGE) {
             PHAssetResourceTypePhoto
         } else {
@@ -39,7 +54,7 @@ actual class PublicMediaInserter actual constructor() {
             val ok = PHPhotoLibrary.sharedPhotoLibrary().performChangesAndWait(
                 {
                     val request = PHAssetCreationRequest.creationRequestForAsset()
-                    request.addResourceWithType(resourceType, data = data, options = null)
+                    add(request, resourceType)
                 },
                 errorVar.ptr,
             )
