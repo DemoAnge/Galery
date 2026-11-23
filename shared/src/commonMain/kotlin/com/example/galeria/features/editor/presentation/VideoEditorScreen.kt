@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -34,6 +35,7 @@ import com.example.galeria.features.editor.domain.clamped
 import com.example.galeria.features.editor.domain.rotatedBy
 import com.example.galeria.features.gallery.presentation.formatDuration
 import com.example.galeria.ui.GaleriaIcons
+import com.example.galeria.ui.VideoMutePreview
 import com.example.galeria.ui.VideoPlayer
 
 @Composable
@@ -48,8 +50,13 @@ fun VideoEditorScreen(
     var startMs by remember(uri) { mutableLongStateOf(0L) }
     var endMs by remember(uri) { mutableLongStateOf(durationMs.coerceAtLeast(0L)) }
     var rotation by remember(uri) { mutableIntStateOf(0) }
-    val edit = VideoEdit(startMs = startMs, endMs = endMs, rotationDegrees = rotation)
-        .clamped(durationMs)
+    var mute by remember(uri) { mutableStateOf(false) }
+    val edit = VideoEdit(
+        startMs = startMs,
+        endMs = endMs,
+        rotationDegrees = rotation,
+        mute = mute,
+    ).clamped(durationMs)
     val duration = durationMs.coerceAtLeast(0L).toFloat()
     val canTrim = durationMs > MIN_TRIM_MS
 
@@ -87,13 +94,22 @@ fun VideoEditorScreen(
             contentAlignment = Alignment.Center,
         ) {
             if (uri.isNotBlank()) {
-                VideoPlayer(
-                    uri = uri,
-                    playWhenReady = !busy,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { rotationZ = edit.rotationDegrees.toFloat() },
-                )
+                val playerModifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { rotationZ = edit.rotationDegrees.toFloat() }
+                if (edit.mute) {
+                    VideoMutePreview(
+                        uri = uri,
+                        playing = !busy,
+                        modifier = playerModifier,
+                    )
+                } else {
+                    VideoPlayer(
+                        uri = uri,
+                        playWhenReady = !busy,
+                        modifier = playerModifier,
+                    )
+                }
             } else {
                 Text("Preparando vista previa…", color = Color.White)
             }
@@ -130,6 +146,10 @@ fun VideoEditorScreen(
                     onClick = { rotation = VideoEdit(rotationDegrees = rotation).rotatedBy(90).rotationDegrees },
                     enabled = !busy,
                 ) { Text("90° der.", color = Color.White) }
+                TextButton(
+                    onClick = { mute = !mute },
+                    enabled = !busy,
+                ) { Text(if (mute) "Con audio" else "Silenciar", color = Color.White) }
             }
             Text(
                 "Recortar",

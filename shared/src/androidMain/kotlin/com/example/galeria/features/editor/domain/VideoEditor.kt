@@ -22,6 +22,7 @@ actual class VideoEditor actual constructor() {
                 startMs = clamped.startMs,
                 endMs = clamped.endMs,
                 extraRotation = clamped.rotationDegrees,
+                includeAudio = !clamped.mute,
             )
             return output.absolutePath
         } catch (e: Exception) {
@@ -48,6 +49,7 @@ private fun copyTrimmed(
     startMs: Long,
     endMs: Long,
     extraRotation: Int,
+    includeAudio: Boolean,
 ) {
     val context = AndroidAppContext.require()
     val extractor = MediaExtractor()
@@ -69,6 +71,7 @@ private fun copyTrimmed(
             val video = mime.startsWith("video/")
             val audio = mime.startsWith("audio/")
             if (!video && !audio) continue
+            if (audio && !includeAudio) continue
             if (video) hasVideo = true
             if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
                 maxInput = maxOf(maxInput, format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE))

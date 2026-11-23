@@ -91,11 +91,11 @@ private fun loadAsset(sourceUri: String): AVAsset {
 
 @OptIn(ExperimentalForeignApi::class)
 private fun exportEdited(asset: AVAsset, outputPath: String, edit: VideoEdit) {
-    if (edit.rotationDegrees == 0) {
+    if (edit.rotationDegrees == 0 && !edit.mute) {
         exportTrimmed(asset, outputPath, edit.startMs, edit.endMs)
         return
     }
-    exportRotated(asset, outputPath, edit)
+    exportComposed(asset, outputPath, edit)
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -120,7 +120,7 @@ private fun exportTrimmed(asset: AVAsset, outputPath: String, startMs: Long, end
 }
 
 @OptIn(ExperimentalForeignApi::class)
-private fun exportRotated(asset: AVAsset, outputPath: String, edit: VideoEdit) {
+private fun exportComposed(asset: AVAsset, outputPath: String, edit: VideoEdit) {
     val sourceVideo = asset.tracksWithMediaType(AVMediaTypeVideo).firstOrNull() as? AVAssetTrack
         ?: error("Video edit failed")
     val span = (edit.endMs - edit.startMs).coerceAtLeast(0L)
@@ -140,18 +140,29 @@ private fun exportRotated(asset: AVAsset, outputPath: String, edit: VideoEdit) {
         error = null,
     )
     check(inserted) { "Video edit failed" }
-    val sourceAudio = asset.tracksWithMediaType(AVMediaTypeAudio).firstOrNull() as? AVAssetTrack
-    if (sourceAudio != null) {
-        val audioTrack = composition.addMutableTrackWithMediaType(
-            mediaType = AVMediaTypeAudio,
-            preferredTrackID = 0,
-        )
-        audioTrack?.insertTimeRange(
-            timeRange = range,
-            ofTrack = sourceAudio,
-            atTime = kCMTimeZero,
-            error = null,
-        )
+    if (!edit.mute) {
+        val sourceAudio = asset.tracksWithMediaType(AVMediaTypeAudio).firstOrNull() as? AVAssetTrack
+        if (sourceAudio != null) {
+            val audioTrack = composition.addMutableTrackWithMediaType(
+                mediaType = AVMediaTypeAudio,
+                preferredTrackID = 0,
+            )
+            audioTrack?.insertTimeRange(
+                timeRange = range,
+                ofTrack = sourceAudio,
+                atTime = kCMTimeZero,
+                error = null,
+            )
+        }
+    }
+    if (edit.rotationDegrees == 0) {
+        try {
+            exportSession(composition, outputPath, AVAssetExportPresetPassthrough) {}
+        } catch (_: Exception) {
+            NSFileManager.defaultManager.removeItemAtPath(outputPath, error = null)
+            exportSession(composition, outputPath, AVAssetExportPresetHighestQuality) {}
+        }
+        return
     }
     val (width, height) = sourceVideo.naturalSize.useContents { width to height }
     val totalRotation = normalizedRotation(trackRotationDegrees(sourceVideo) + edit.rotationDegrees)
