@@ -25,11 +25,13 @@ object IosShareHost {
 @OptIn(ExperimentalForeignApi::class)
 actual class ShareSheet actual constructor() {
 
-    actual fun share(request: ShareRequest) {
+    actual fun share(requests: List<ShareRequest>) {
         val host = IosShareHost.controller ?: error("Share requires a view controller")
-        val item = loadShareItem(request) ?: error("Share item unavailable")
+        check(requests.isNotEmpty()) { "Missing public media" }
+        val items = requests.mapNotNull(::loadShareItem)
+        check(items.isNotEmpty()) { "Share item unavailable" }
         val sheet = UIActivityViewController(
-            activityItems = listOf(item),
+            activityItems = items,
             applicationActivities = null,
         )
         sheet.popoverPresentationController?.sourceView = host.view

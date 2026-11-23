@@ -20,6 +20,7 @@ import com.example.galeria.features.gallery.domain.UserCollection
 import com.example.galeria.features.gallery.domain.movingTo
 import com.example.galeria.features.gallery.domain.newUserCollection
 import com.example.galeria.features.share.domain.ShareMediaUseCase
+import com.example.galeria.features.share.presentation.ShareRequest
 import kotlin.time.TimeSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -317,8 +318,10 @@ class GalleryViewModel(
     }
 
     fun shareItems(items: List<MediaItem>) {
-        val first = items.firstOrNull() ?: return
-        val result = runCatching { shareMedia(first.publicUri, mimeType(first)) }
+        if (items.isEmpty()) return
+        val result = runCatching {
+            shareMedia(items.map { ShareRequest(it.publicUri, mimeType(it)) })
+        }
         if (result.isFailure) {
             updateReady { current ->
                 current.copy(

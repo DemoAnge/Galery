@@ -8,5 +8,5 @@ class ShareRequest(
 }
 
 expect class ShareSheet() {
-    fun share(request: ShareRequest)
+    fun share(requests: List<ShareRequest>)
 }

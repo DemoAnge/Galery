@@ -11,8 +11,18 @@ class ShareMediaUseCase(
     private val shareSheet: ShareSheet,
 ) {
     operator fun invoke(publicUri: String, mimeType: String) {
-        require(publicUri.isNotBlank()) { "Missing public media" }
-        require(mimeType.isNotBlank()) { "Missing mime type" }
-        shareSheet.share(ShareRequest(publicUri = publicUri, mimeType = mimeType))
+        invoke(listOf(ShareRequest(publicUri = publicUri, mimeType = mimeType)))
+    }
+
+    operator fun invoke(requests: List<ShareRequest>) {
+        require(requests.isNotEmpty()) { "Missing public media" }
+        requests.forEach { request ->
+            require(request.publicUri.isNotBlank()) { "Missing public media" }
+            require(request.mimeType.isNotBlank()) { "Missing mime type" }
+        }
+        shareSheet.share(requests)
     }
 }
+
+internal fun sharedMimeType(types: List<String>): String =
+    types.distinct().singleOrNull() ?: "*/*"
