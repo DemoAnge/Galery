@@ -29,6 +29,7 @@ fun SelectionBar(
     onDelete: () -> Unit,
 ) {
     var confirmMove by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth()) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -58,7 +59,7 @@ fun SelectionBar(
             IconButton(onClick = { confirmMove = true }) {
                 Icon(GaleriaIcons.VaultOutline, contentDescription = "Mover al Vault")
             }
-            IconButton(onClick = onDelete) {
+            IconButton(onClick = { confirmDelete = true }) {
                 Icon(GaleriaIcons.Delete, contentDescription = "Eliminar")
             }
         }
@@ -71,6 +72,16 @@ fun SelectionBar(
                 onMoveToVault()
             },
             onDismiss = { confirmMove = false },
+        )
+    }
+    if (confirmDelete) {
+        GalleryDeleteConfirmDialog(
+            count = count,
+            onConfirm = {
+                confirmDelete = false
+                onDelete()
+            },
+            onDismiss = { confirmDelete = false },
         )
     }
     }

@@ -89,11 +89,12 @@ fun GalleryViewerScreen(
     val isFavorite = item.id in favoriteIds
     var chromeVisible by remember { mutableStateOf(true) }
     var confirmMove by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     val dismiss = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val scrimAlpha = (1f - (abs(dismiss.value) / 600f)).coerceIn(0.25f, 1f)
-    LaunchedEffect(chromeVisible, item.id, confirmMove) {
-        if (!chromeVisible || confirmMove) return@LaunchedEffect
+    LaunchedEffect(chromeVisible, item.id, confirmMove, confirmDelete) {
+        if (!chromeVisible || confirmMove || confirmDelete) return@LaunchedEffect
         delay(3_000)
         chromeVisible = false
     }
@@ -166,7 +167,7 @@ fun GalleryViewerScreen(
                 onShare = onShare,
                 onEdit = onEdit,
                 onFavorite = onFavorite,
-                onDelete = onDelete,
+                onDelete = { confirmDelete = true },
                 onMoveToVault = { confirmMove = true },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -182,6 +183,16 @@ fun GalleryViewerScreen(
                     onMoveToVault()
                 },
                 onDismiss = { confirmMove = false },
+            )
+        }
+        if (confirmDelete) {
+            GalleryDeleteConfirmDialog(
+                count = 1,
+                onConfirm = {
+                    confirmDelete = false
+                    onDelete()
+                },
+                onDismiss = { confirmDelete = false },
             )
         }
     }
