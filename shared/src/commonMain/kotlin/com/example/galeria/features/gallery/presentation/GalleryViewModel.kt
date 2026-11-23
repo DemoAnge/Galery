@@ -14,6 +14,7 @@ import com.example.galeria.features.gallery.domain.MediaItem
 import com.example.galeria.features.gallery.domain.MediaLibraryWatcher
 import com.example.galeria.features.gallery.domain.MediaRepository
 import com.example.galeria.features.gallery.data.CollectionStore
+import com.example.galeria.features.gallery.data.FavoritesStore
 import com.example.galeria.features.gallery.domain.ScanMediaUseCase
 import com.example.galeria.features.gallery.domain.UserCollection
 import com.example.galeria.features.gallery.domain.movingTo
@@ -75,6 +76,7 @@ class GalleryViewModel(
     private val permission: MediaPermission,
     private val shareMedia: ShareMediaUseCase,
     private val collectionStore: CollectionStore,
+    private val favoritesStore: FavoritesStore,
     private val libraryWatcher: MediaLibraryWatcher,
 ) : ViewModel() {
 
@@ -106,6 +108,7 @@ class GalleryViewModel(
 
     init {
         userCollections = collectionStore.load()
+        favorites = favoritesStore.load()
         refresh()
     }
 
@@ -328,6 +331,7 @@ class GalleryViewModel(
 
     fun toggleFavorite(item: MediaItem) {
         favorites = if (item.id in favorites) favorites - item.id else favorites + item.id
+        favoritesStore.save(favorites)
         updateReady { it.copy(favorites = favorites) }
     }
 
@@ -611,6 +615,14 @@ class GalleryViewModel(
         val merged = mergeCustomAlbums(albums, allItems)
         val opened = restoreOpenedAlbum(prevReady?.openedAlbum, merged, allItems)
         val available = allItems.associateBy { it.id }
+        if (allItems.isNotEmpty()) {
+            val live = available.keys
+            val pruned = favorites.intersect(live)
+            if (pruned.size != favorites.size) {
+                favorites = pruned
+                favoritesStore.save(favorites)
+            }
+        }
         val selected = prevReady?.selectedIds.orEmpty().filter { it in available }.toSet()
         val editing = prevReady?.editing?.takeIf { it.item.id in available }
         return GalleryUiState.Ready(

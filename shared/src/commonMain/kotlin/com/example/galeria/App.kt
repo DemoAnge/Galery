@@ -50,6 +50,7 @@ import com.example.galeria.features.gallery.domain.MediaLibraryWatcher
 import com.example.galeria.features.gallery.domain.ScanMediaUseCase
 import com.example.galeria.features.gallery.domain.createMediaRepository
 import com.example.galeria.features.gallery.data.CollectionStore
+import com.example.galeria.features.gallery.data.FavoritesStore
 import com.example.galeria.features.gallery.presentation.AlbumGridScreen
 import com.example.galeria.features.gallery.presentation.AlbumMediaPickerScreen
 import com.example.galeria.features.gallery.presentation.AlbumNameDialog
@@ -101,6 +102,7 @@ fun App() {
                 permission = com.example.galeria.features.gallery.presentation.MediaPermission(),
                 shareMedia = ShareMediaUseCase(ShareSheet()),
                 collectionStore = CollectionStore(),
+                favoritesStore = FavoritesStore(),
                 libraryWatcher = MediaLibraryWatcher(),
             )
         }
