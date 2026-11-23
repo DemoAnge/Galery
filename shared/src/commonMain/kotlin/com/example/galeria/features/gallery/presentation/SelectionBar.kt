@@ -9,6 +9,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +28,7 @@ fun SelectionBar(
     onAddToAlbum: () -> Unit,
     onMoveToVault: () -> Unit,
     onDelete: () -> Unit,
+    onRemoveFromAlbum: (() -> Unit)? = null,
 ) {
     var confirmMove by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -52,6 +54,11 @@ fun SelectionBar(
             )
             IconButton(onClick = onShare) {
                 Icon(GaleriaIcons.Share, contentDescription = "Compartir")
+            }
+            if (onRemoveFromAlbum != null) {
+                TextButton(onClick = onRemoveFromAlbum) {
+                    Text("Quitar")
+                }
             }
             IconButton(onClick = onAddToAlbum) {
                 Icon(GaleriaIcons.Plus, contentDescription = "Mover al álbum")

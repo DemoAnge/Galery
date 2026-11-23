@@ -47,3 +47,15 @@ fun List<UserCollection>.renaming(collectionId: String, title: String): List<Use
 
 fun List<UserCollection>.without(collectionId: String): List<UserCollection> =
     filterNot { it.id == collectionId }
+
+fun List<UserCollection>.removingFrom(collectionId: String, itemIds: List<String>): List<UserCollection> {
+    val ids = itemIds.toSet()
+    if (ids.isEmpty()) return this
+    return map { collection ->
+        if (collection.id == collectionId) {
+            collection.copy(itemIds = collection.itemIds.filterNot { it in ids })
+        } else {
+            collection
+        }
+    }
+}

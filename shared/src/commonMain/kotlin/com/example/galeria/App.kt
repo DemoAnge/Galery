@@ -431,6 +431,14 @@ fun App() {
                                     },
                                     onMoveToVault = galleryViewModel::moveSelectedToVault,
                                     onDelete = galleryViewModel::deleteSelected,
+                                    onRemoveFromAlbum = ready?.openedAlbum?.customId?.let { collectionId ->
+                                        {
+                                            galleryViewModel.removeFromAlbum(
+                                                collectionId,
+                                                ready.selectedIds.toList(),
+                                            )
+                                        }
+                                    },
                                 )
                             }
                             Box(Modifier.weight(1f)) {

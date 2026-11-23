@@ -19,6 +19,7 @@ import com.example.galeria.features.gallery.domain.ScanMediaUseCase
 import com.example.galeria.features.gallery.domain.UserCollection
 import com.example.galeria.features.gallery.domain.movingTo
 import com.example.galeria.features.gallery.domain.newUserCollection
+import com.example.galeria.features.gallery.domain.removingFrom
 import com.example.galeria.features.gallery.domain.renaming
 import com.example.galeria.features.gallery.domain.without
 import com.example.galeria.features.share.domain.ShareMediaUseCase
@@ -279,6 +280,23 @@ class GalleryViewModel(
                 openedAlbum = if (keepOpen) current.openedAlbum else null,
                 selectedIds = if (keepOpen) current.selectedIds else emptySet(),
                 message = "Álbum eliminado. Las fotos siguen en la galería.",
+            )
+        }
+    }
+
+    fun removeFromAlbum(collectionId: String, itemIds: List<String>) {
+        if (itemIds.isEmpty()) return
+        userCollections = userCollections.removingFrom(collectionId, itemIds)
+        collectionStore.save(userCollections)
+        updateReady { current ->
+            val albums = mergeCustomAlbums(scannedAlbums(current.albums), current.allItems)
+            current.copy(
+                albums = albums,
+                userCollections = userCollections,
+                openedAlbum = albums.firstOrNull { it.customId == collectionId } ?: current.openedAlbum,
+                selectedIds = emptySet(),
+                viewing = null,
+                message = if (itemIds.size == 1) "Quitado del álbum" else "Quitados del álbum",
             )
         }
     }

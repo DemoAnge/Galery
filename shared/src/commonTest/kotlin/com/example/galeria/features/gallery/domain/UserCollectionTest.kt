@@ -43,6 +43,15 @@ class UserCollectionTest {
     }
 
     @Test
+    fun removingFromAnAlbumLeavesTheFilesInOtherAlbums() {
+        val trip = UserCollection("c-1", "Viaje", listOf("a", "b", "c"))
+        val family = UserCollection("c-2", "Familia", listOf("b"))
+        val next = listOf(trip, family).removingFrom("c-1", listOf("b", "c"))
+        assertEquals(listOf("a"), next.first { it.id == "c-1" }.itemIds)
+        assertEquals(listOf("b"), next.first { it.id == "c-2" }.itemIds)
+    }
+
+    @Test
     fun deletingAnAlbumKeepsTheOthers() {
         val trip = UserCollection("c-1", "Viaje", listOf("a"))
         val family = UserCollection("c-2", "Familia", listOf("b"))
