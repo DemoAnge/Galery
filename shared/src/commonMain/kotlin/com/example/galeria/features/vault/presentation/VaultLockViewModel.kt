@@ -39,7 +39,10 @@ sealed class VaultUiState {
         val offerBiometric: Boolean = false,
         val message: String? = null,
         val openedCollection: String? = null,
-    ) : VaultUiState()
+        val selectedIds: Set<String> = emptySet(),
+    ) : VaultUiState() {
+        val selecting: Boolean get() = selectedIds.isNotEmpty()
+    }
     data class ChangingLock(
         val currentMethod: LockMethod,
         val items: List<VaultItem>,
@@ -303,7 +306,63 @@ class VaultLockViewModel(
 
     fun closeCollection() {
         val current = _state.value as? VaultUiState.Unlocked ?: return
-        _state.value = current.copy(openedCollection = null)
+        _state.value = current.copy(openedCollection = null, selectedIds = emptySet())
+    }
+
+    fun startSelection(item: VaultItem) {
+        val current = _state.value as? VaultUiState.Unlocked ?: return
+        _state.value = current.copy(selectedIds = setOf(item.id.value), offerBiometric = false)
+    }
+
+    fun toggleSelect(item: VaultItem) {
+        val current = _state.value as? VaultUiState.Unlocked ?: return
+        val next = if (item.id.value in current.selectedIds) {
+            current.selectedIds - item.id.value
+        } else {
+            current.selectedIds + item.id.value
+        }
+        _state.value = current.copy(selectedIds = next)
+    }
+
+    fun clearSelection() {
+        val current = _state.value as? VaultUiState.Unlocked ?: return
+        _state.value = current.copy(selectedIds = emptySet())
+    }
+
+    fun exportSelected() {
+        val current = _state.value as? VaultUiState.Unlocked ?: return
+        val ids = current.items.filter { it.id.value in current.selectedIds }.map { it.id }
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.Default) { exportFromVault(ids) }
+                ids.forEach { synchronized(thumbCache) { thumbCache.remove(it.value) } }
+                _state.value = unlockedState(
+                    message = if (ids.size == 1) "Exportado a la galería pública" else "Exportados a la galería pública",
+                    openedCollection = current.openedCollection,
+                )
+            } catch (_: Exception) {
+                _state.value = current.copy(message = "Error al exportar")
+            }
+        }
+    }
+
+    fun deleteSelected() {
+        val current = _state.value as? VaultUiState.Unlocked ?: return
+        val ids = current.items.filter { it.id.value in current.selectedIds }.map { it.id }
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.Default) { deleteFromVault(ids) }
+                ids.forEach { synchronized(thumbCache) { thumbCache.remove(it.value) } }
+                _state.value = unlockedState(
+                    message = "Borrado del disco. No se puede recuperar.",
+                    openedCollection = current.openedCollection,
+                )
+            } catch (_: Exception) {
+                _state.value = current.copy(message = "Error al borrar")
+            }
+        }
     }
 
     fun showItemAt(index: Int) {

@@ -218,6 +218,7 @@ fun App() {
         AppBackHandler(
             enabled = vaultOpen &&
                 unlockedVault?.openedCollection != null &&
+                unlockedVault?.selecting != true &&
                 !overlay &&
                 vaultState !is VaultUiState.Viewing,
         ) {
@@ -225,7 +226,15 @@ fun App() {
         }
         AppBackHandler(
             enabled = vaultOpen &&
+                (unlockedVault?.selecting == true) &&
+                !overlay,
+        ) {
+            vaultViewModel.clearSelection()
+        }
+        AppBackHandler(
+            enabled = vaultOpen &&
                 unlockedVault?.openedCollection == null &&
+                unlockedVault?.selecting != true &&
                 !overlay &&
                 vaultState !is VaultUiState.Viewing,
         ) {
@@ -735,6 +744,11 @@ private fun VaultHost(
             onEnableBiometric = viewModel::enableBiometric,
             onSkipBiometric = viewModel::skipBiometric,
             onChangeLock = viewModel::startChangeLock,
+            onLongPress = viewModel::startSelection,
+            onToggleSelect = viewModel::toggleSelect,
+            onClearSelection = viewModel::clearSelection,
+            onExportSelected = viewModel::exportSelected,
+            onDeleteSelected = viewModel::deleteSelected,
             loadThumbnail = viewModel::loadThumbnail,
         )
         is VaultUiState.ChangingLock, is VaultUiState.Viewing -> Unit

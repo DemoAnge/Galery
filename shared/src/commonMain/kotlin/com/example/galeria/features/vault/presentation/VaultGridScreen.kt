@@ -1,8 +1,11 @@
 package com.example.galeria.features.vault.presentation
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -58,6 +62,11 @@ fun VaultGridScreen(
     onEnableBiometric: () -> Unit,
     onSkipBiometric: () -> Unit,
     onChangeLock: () -> Unit,
+    onLongPress: (VaultItem) -> Unit,
+    onToggleSelect: (VaultItem) -> Unit,
+    onClearSelection: () -> Unit,
+    onExportSelected: () -> Unit,
+    onDeleteSelected: () -> Unit,
     loadThumbnail: suspend (VaultItem) -> ImageBitmap?,
 ) {
     val photos = remember(state.items) { vaultPhotos(state.items) }
@@ -76,8 +85,16 @@ fun VaultGridScreen(
                 else -> "${state.items.size} ${if (state.items.size == 1) "privado" else "privados"}"
             },
             onBack = if (opened != null) onCloseCollection else onLeave,
-            onChangeLock = if (opened == null) onChangeLock else null,
+            onChangeLock = if (opened == null && !state.selecting) onChangeLock else null,
         )
+        if (state.selecting) {
+            VaultSelectionBar(
+                count = state.selectedIds.size,
+                onClose = onClearSelection,
+                onExport = onExportSelected,
+                onDelete = onDeleteSelected,
+            )
+        }
         if (state.message != null) {
             Text(
                 state.message,
@@ -105,7 +122,11 @@ fun VaultGridScreen(
         when {
             opened != null -> VaultMediaGrid(
                 items = opened.items,
+                selectedIds = state.selectedIds,
+                selecting = state.selecting,
                 onOpenItem = { item -> onOpenItem(item, opened.items) },
+                onLongPress = onLongPress,
+                onToggleSelect = onToggleSelect,
                 loadThumbnail = loadThumbnail,
             )
             state.items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -120,8 +141,12 @@ fun VaultGridScreen(
                 photos = photos,
                 videos = videos,
                 collections = collections,
+                selectedIds = state.selectedIds,
+                selecting = state.selecting,
                 onOpenItem = onOpenItem,
                 onOpenCollection = onOpenCollection,
+                onLongPress = onLongPress,
+                onToggleSelect = onToggleSelect,
                 loadThumbnail = loadThumbnail,
             )
         }
@@ -165,8 +190,12 @@ private fun VaultHomeGrid(
     photos: List<VaultItem>,
     videos: List<VaultItem>,
     collections: List<VaultCollection>,
+    selectedIds: Set<String>,
+    selecting: Boolean,
     onOpenItem: (VaultItem, List<VaultItem>) -> Unit,
     onOpenCollection: (String) -> Unit,
+    onLongPress: (VaultItem) -> Unit,
+    onToggleSelect: (VaultItem) -> Unit,
     loadThumbnail: suspend (VaultItem) -> ImageBitmap?,
 ) {
     LazyVerticalGrid(
@@ -183,7 +212,11 @@ private fun VaultHomeGrid(
             items(photos, key = { "p-${it.id.value}" }) { item ->
                 VaultGridCell(
                     item = item,
+                    selected = item.id.value in selectedIds,
+                    selecting = selecting,
                     onClick = { onOpenItem(item, photos) },
+                    onLongPress = { onLongPress(item) },
+                    onToggleSelect = { onToggleSelect(item) },
                     loadThumbnail = loadThumbnail,
                 )
             }
@@ -195,7 +228,11 @@ private fun VaultHomeGrid(
             items(videos, key = { "v-${it.id.value}" }) { item ->
                 VaultGridCell(
                     item = item,
+                    selected = item.id.value in selectedIds,
+                    selecting = selecting,
                     onClick = { onOpenItem(item, videos) },
+                    onLongPress = { onLongPress(item) },
+                    onToggleSelect = { onToggleSelect(item) },
                     loadThumbnail = loadThumbnail,
                 )
             }
@@ -234,7 +271,11 @@ private fun VaultHomeGrid(
 @Composable
 private fun VaultMediaGrid(
     items: List<VaultItem>,
+    selectedIds: Set<String>,
+    selecting: Boolean,
     onOpenItem: (VaultItem) -> Unit,
+    onLongPress: (VaultItem) -> Unit,
+    onToggleSelect: (VaultItem) -> Unit,
     loadThumbnail: suspend (VaultItem) -> ImageBitmap?,
 ) {
     LazyVerticalGrid(
@@ -247,7 +288,11 @@ private fun VaultMediaGrid(
         items(items, key = { it.id.value }) { item ->
             VaultGridCell(
                 item = item,
+                selected = item.id.value in selectedIds,
+                selecting = selecting,
                 onClick = { onOpenItem(item) },
+                onLongPress = { onLongPress(item) },
+                onToggleSelect = { onToggleSelect(item) },
                 loadThumbnail = loadThumbnail,
             )
         }
@@ -265,9 +310,14 @@ private fun VaultSectionTitle(title: String, count: Int) {
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun VaultGridCell(
     item: VaultItem,
+    selected: Boolean = false,
+    selecting: Boolean = false,
     onClick: () -> Unit,
+    onLongPress: () -> Unit = {},
+    onToggleSelect: () -> Unit = {},
     loadThumbnail: suspend (VaultItem) -> ImageBitmap?,
 ) {
     var image by remember(item.id.value) { mutableStateOf<ImageBitmap?>(null) }
@@ -279,7 +329,14 @@ private fun VaultGridCell(
             .fillMaxWidth()
             .aspectRatio(1f)
             .clip(RoundedCornerShape(TileRadius))
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = { if (selecting) onToggleSelect() else onClick() },
+                onLongClick = { if (selecting) onToggleSelect() else onLongPress() },
+            )
+            .then(
+                if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(TileRadius))
+                else Modifier,
+            ),
     ) {
         val bitmap = image
         if (bitmap != null) {
@@ -302,6 +359,16 @@ private fun VaultGridCell(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+            )
         }
         if (item.mediaKind == VaultMediaKind.VIDEO) {
             Box(
