@@ -4,6 +4,8 @@ import com.example.galeria.features.vault.domain.VaultItem
 import com.example.galeria.features.vault.domain.VaultItemId
 import com.example.galeria.features.vault.domain.VaultMediaKind
 import com.example.galeria.features.vault.domain.allowsPinRecovery
+import com.example.galeria.features.vault.domain.lockoutDelayMs
+import com.example.galeria.features.vault.domain.lockoutRemainingMs
 import com.example.galeria.features.vault.domain.shouldPurgeOrphanSecrets
 import com.example.galeria.features.vault.domain.shouldResetLockWhenLeaving
 import kotlin.test.Test
@@ -55,6 +57,15 @@ class VaultLayoutTest {
     fun missingSandboxMarkerPurgesLeftoverSecrets() {
         assertTrue(shouldPurgeOrphanSecrets(hasInstallMarker = false))
         assertFalse(shouldPurgeOrphanSecrets(hasInstallMarker = true))
+    }
+
+    @Test
+    fun lockoutStartsAfterFiveFailures() {
+        assertEquals(0L, lockoutDelayMs(4))
+        assertEquals(30_000L, lockoutDelayMs(5))
+        assertEquals(1_800_000L, lockoutDelayMs(12))
+        assertEquals(20_000L, lockoutRemainingMs(5, lastFailureEpochMs = 1_000L, nowEpochMs = 11_000L))
+        assertEquals(0L, lockoutRemainingMs(5, lastFailureEpochMs = 1_000L, nowEpochMs = 40_000L))
     }
 
     @Test

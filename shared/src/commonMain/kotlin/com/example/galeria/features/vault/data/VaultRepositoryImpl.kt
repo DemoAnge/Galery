@@ -6,6 +6,7 @@ import com.example.galeria.core.encryption.KeyDeriver
 import com.example.galeria.core.securestorage.SecureKeyStore
 import com.example.galeria.features.vault.domain.ExternalMediaSource
 import com.example.galeria.features.vault.domain.LockMethod
+import com.example.galeria.features.vault.domain.lockoutRemainingMs
 import com.example.galeria.features.vault.domain.shouldPurgeOrphanSecrets
 import com.example.galeria.features.vault.domain.shouldResetLockWhenLeaving
 import com.example.galeria.features.vault.domain.VaultItem
@@ -66,6 +67,7 @@ class VaultRepositoryImpl(
     }
 
     override fun verifyAndUnlock(secret: CharArray): Boolean {
+        if (lockoutRemainingMs() > 0L) return false
         val salt = secureKeyStore.read(ID_SALT) ?: return false
         val wrappedBytes = secureKeyStore.read(ID_WRAPPED_DEK) ?: return false
         val kek = keyDeriver.derive(secret, salt)
@@ -76,13 +78,23 @@ class VaultRepositoryImpl(
             sessionKey = DerivedKey.of(dekBytes)
             persistDeviceDek(sessionKey)
             dekBytes.fill(0)
+            clearFailedUnlocks()
             true
         } catch (_: Exception) {
+            recordFailedUnlock()
             false
         } finally {
             kek.clear()
         }
     }
+
+    override fun failedUnlockAttempts(): Int = readInt(ID_FAIL_COUNT)
+
+    override fun lockoutRemainingMs(): Long = lockoutRemainingMs(
+        failedAttempts = failedUnlockAttempts(),
+        lastFailureEpochMs = readLong(ID_LOCKOUT_STARTED),
+        nowEpochMs = currentEpochMs(),
+    )
 
     override fun lock() {
         sessionKey?.clear()
@@ -245,11 +257,13 @@ class VaultRepositoryImpl(
     }
 
     override fun unlockWithDek(dekBytes: ByteArray): Boolean {
+        if (lockoutRemainingMs() > 0L) return false
         return try {
             val key = DerivedKey.of(dekBytes)
             sessionKey?.clear()
             sessionKey = key
             persistDeviceDek(key)
+            clearFailedUnlocks()
             true
         } catch (_: Exception) {
             false
@@ -257,10 +271,12 @@ class VaultRepositoryImpl(
     }
 
     override fun unlockWithStoredDeviceKey(): Boolean {
+        if (lockoutRemainingMs() > 0L) return false
         return try {
             val key = loadDeviceDek() ?: return false
             sessionKey?.clear()
             sessionKey = key
+            clearFailedUnlocks()
             true
         } catch (_: Exception) {
             false
@@ -307,7 +323,61 @@ class VaultRepositoryImpl(
         runCatching { secureKeyStore.delete(ID_LOCK_METHOD) }
         runCatching { secureKeyStore.delete(ID_BIO_WRAPPED) }
         runCatching { secureKeyStore.delete(ID_DEVICE_DEK) }
+        runCatching { secureKeyStore.delete(ID_FAIL_COUNT) }
+        runCatching { secureKeyStore.delete(ID_LOCKOUT_STARTED) }
         runCatching { fileStore.delete(VAULT_METADATA_FILE_ID) }
+    }
+
+    private fun recordFailedUnlock() {
+        val next = failedUnlockAttempts() + 1
+        writeInt(ID_FAIL_COUNT, next)
+        writeLong(ID_LOCKOUT_STARTED, currentEpochMs())
+    }
+
+    private fun clearFailedUnlocks() {
+        runCatching { secureKeyStore.delete(ID_FAIL_COUNT) }
+        runCatching { secureKeyStore.delete(ID_LOCKOUT_STARTED) }
+    }
+
+    private fun readInt(id: String): Int {
+        val bytes = secureKeyStore.read(id) ?: return 0
+        if (bytes.size < 4) return 0
+        return ((bytes[0].toInt() and 0xFF) shl 24) or
+            ((bytes[1].toInt() and 0xFF) shl 16) or
+            ((bytes[2].toInt() and 0xFF) shl 8) or
+            (bytes[3].toInt() and 0xFF)
+    }
+
+    private fun writeInt(id: String, value: Int) {
+        secureKeyStore.write(
+            id,
+            byteArrayOf(
+                (value ushr 24).toByte(),
+                (value ushr 16).toByte(),
+                (value ushr 8).toByte(),
+                value.toByte(),
+            ),
+        )
+    }
+
+    private fun readLong(id: String): Long {
+        val bytes = secureKeyStore.read(id) ?: return 0L
+        if (bytes.size < 8) return 0L
+        var value = 0L
+        for (index in 0 until 8) {
+            value = (value shl 8) or (bytes[index].toLong() and 0xFF)
+        }
+        return value
+    }
+
+    private fun writeLong(id: String, value: Long) {
+        val bytes = ByteArray(8)
+        var remaining = value
+        for (index in 7 downTo 0) {
+            bytes[index] = remaining.toByte()
+            remaining = remaining ushr 8
+        }
+        secureKeyStore.write(id, bytes)
     }
 
     private fun requireSession(): DerivedKey =
@@ -364,6 +434,8 @@ private const val ID_WRAPPED_DEK = "vault.wrapped_dek"
 private const val ID_LOCK_METHOD = "vault.lock_method"
 private const val ID_BIO_WRAPPED = "vault.bio_wrapped_dek"
 private const val ID_DEVICE_DEK = "vault.device_dek"
+private const val ID_FAIL_COUNT = "vault.fail_count"
+private const val ID_LOCKOUT_STARTED = "vault.lockout_started"
 
 private fun ByteArray.toHex(): String = joinToString("") { byte ->
     val value = byte.toInt() and 0xFF

@@ -18,3 +18,25 @@ fun allowsPinRecovery(): Boolean = false
  * de una instalación anterior y hay que borrarlo.
  */
 fun shouldPurgeOrphanSecrets(hasInstallMarker: Boolean): Boolean = !hasInstallMarker
+
+const val LOCKOUT_START_AFTER_FAILURES: Int = 5
+
+fun lockoutDelayMs(failedAttempts: Int): Long = when {
+    failedAttempts < LOCKOUT_START_AFTER_FAILURES -> 0L
+    failedAttempts == 5 -> 30_000L
+    failedAttempts == 6 -> 60_000L
+    failedAttempts == 7 -> 120_000L
+    failedAttempts == 8 -> 300_000L
+    failedAttempts == 9 -> 900_000L
+    else -> 1_800_000L
+}
+
+fun lockoutRemainingMs(
+    failedAttempts: Int,
+    lastFailureEpochMs: Long,
+    nowEpochMs: Long,
+): Long {
+    val delay = lockoutDelayMs(failedAttempts)
+    if (delay <= 0L || lastFailureEpochMs <= 0L) return 0L
+    return (lastFailureEpochMs + delay - nowEpochMs).coerceAtLeast(0L)
+}

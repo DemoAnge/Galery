@@ -18,6 +18,10 @@ interface VaultRepository {
 
     fun verifyAndUnlock(secret: CharArray): Boolean
 
+    fun failedUnlockAttempts(): Int
+
+    fun lockoutRemainingMs(): Long
+
     fun lock()
 
     /**

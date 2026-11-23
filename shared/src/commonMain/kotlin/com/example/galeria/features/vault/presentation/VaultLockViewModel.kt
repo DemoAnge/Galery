@@ -30,6 +30,7 @@ sealed class VaultUiState {
         val pinFallback: Boolean = false,
         val busy: Boolean = false,
         val error: String? = null,
+        val lockoutRemainingMs: Long = 0,
     ) : VaultUiState()
     data class Unlocked(
         val items: List<VaultItem>,
@@ -104,6 +105,10 @@ class VaultLockViewModel(
 
     fun unlockWithPin(pin: CharArray) {
         val current = _state.value as? VaultUiState.Locked ?: return
+        if (rejectIfLockedOut(current)) {
+            pin.fill('\u0000')
+            return
+        }
         biometric.cancel()
         _state.value = current.copy(busy = true, error = null, pinFallback = true)
         viewModelScope.launch {
@@ -112,13 +117,17 @@ class VaultLockViewModel(
             if (ok) {
                 _state.value = unlockedState(offerBiometric = shouldOfferBiometric())
             } else {
-                _state.value = current.copy(busy = false, error = "PIN incorrecto")
+                _state.value = lockedState(
+                    error = failedUnlockMessage("PIN incorrecto"),
+                    pinFallback = true,
+                )
             }
         }
     }
 
     fun unlockWithPattern(cells: IntArray) {
         val current = _state.value as? VaultUiState.Locked ?: return
+        if (rejectIfLockedOut(current)) return
         biometric.cancel()
         _state.value = current.copy(busy = true, error = null, pinFallback = true)
         viewModelScope.launch {
@@ -126,13 +135,17 @@ class VaultLockViewModel(
             if (ok) {
                 _state.value = unlockedState(offerBiometric = shouldOfferBiometric())
             } else {
-                _state.value = current.copy(busy = false, error = "Patrón incorrecto")
+                _state.value = lockedState(
+                    error = failedUnlockMessage("Patrón incorrecto"),
+                    pinFallback = true,
+                )
             }
         }
     }
 
     fun unlockWithBiometric() {
         val current = _state.value as? VaultUiState.Locked ?: return
+        if (rejectIfLockedOut(current)) return
         if (!biometric.isAvailable()) {
             _state.value = current.copy(
                 busy = false,
@@ -407,12 +420,31 @@ class VaultLockViewModel(
     private fun shouldOfferBiometric(): Boolean =
         biometric.isAvailable() && !repository.isBiometricEnabled()
 
+    private fun rejectIfLockedOut(current: VaultUiState.Locked): Boolean {
+        val remaining = repository.lockoutRemainingMs()
+        if (remaining <= 0L) return false
+        biometric.cancel()
+        _state.value = current.copy(
+            busy = false,
+            error = lockoutMessage(remaining),
+            lockoutRemainingMs = remaining,
+        )
+        return true
+    }
+
+    private fun failedUnlockMessage(fallback: String): String {
+        val remaining = repository.lockoutRemainingMs()
+        return if (remaining > 0L) lockoutMessage(remaining) else fallback
+    }
+
     private fun lockedState(
         error: String? = null,
         pinFallback: Boolean? = null,
     ): VaultUiState.Locked {
         val available = biometric.isAvailable()
-        val canUseFingerprint = available &&
+        val remaining = repository.lockoutRemainingMs()
+        val canUseFingerprint = remaining <= 0L &&
+            available &&
             (repository.isBiometricEnabled() || repository.canHideWithoutUnlock())
         return VaultUiState.Locked(
             method = repository.configuredLockMethod() ?: LockMethod.PIN,
@@ -420,6 +452,7 @@ class VaultLockViewModel(
             biometricEnabled = canUseFingerprint,
             pinFallback = pinFallback ?: false,
             error = error,
+            lockoutRemainingMs = remaining,
         )
     }
 
@@ -458,5 +491,16 @@ class VaultLockViewModel(
 
     private fun clearThumbs() {
         synchronized(thumbCache) { thumbCache.clear() }
+    }
+}
+
+internal fun lockoutMessage(remainingMs: Long): String {
+    val seconds = ((remainingMs + 999) / 1000).coerceAtLeast(1L)
+    val minutes = seconds / 60
+    val rest = seconds % 60
+    return when {
+        minutes <= 0L -> "Demasiados intentos. Espera ${seconds}s."
+        rest == 0L -> "Demasiados intentos. Espera $minutes min."
+        else -> "Demasiados intentos. Espera $minutes min ${rest}s."
     }
 }

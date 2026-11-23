@@ -41,7 +41,16 @@ fun VaultUnlockScreen(
     onUsePin: () -> Unit,
     onCancelBiometric: () -> Unit = {},
 ) {
-    val canUseFingerprint = state.biometricEnabled && state.biometricAvailable
+    var remainingMs by remember(state.lockoutRemainingMs) { mutableStateOf(state.lockoutRemainingMs) }
+    LaunchedEffect(state.lockoutRemainingMs) {
+        remainingMs = state.lockoutRemainingMs
+        while (remainingMs > 0L) {
+            kotlinx.coroutines.delay(1_000)
+            remainingMs = (remainingMs - 1_000).coerceAtLeast(0L)
+        }
+    }
+    val lockedOut = remainingMs > 0L
+    val canUseFingerprint = state.biometricEnabled && state.biometricAvailable && !lockedOut
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -73,7 +82,13 @@ fun VaultUnlockScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(20.dp))
-        if (state.error != null) {
+        if (lockedOut || remainingMs > 0L) {
+            Text(
+                lockoutMessage(remainingMs.coerceAtLeast(state.lockoutRemainingMs)),
+                color = MaterialTheme.colorScheme.error,
+            )
+            Spacer(Modifier.height(8.dp))
+        } else if (state.error != null) {
             Text(state.error, color = MaterialTheme.colorScheme.error)
             Spacer(Modifier.height(8.dp))
         }
@@ -99,7 +114,7 @@ fun VaultUnlockScreen(
                 }
                 VaultPinPad(
                     value = pin,
-                    enabled = !state.busy || (canUseFingerprint && !state.pinFallback),
+                    enabled = !lockedOut && (!state.busy || (canUseFingerprint && !state.pinFallback)),
                     onChange = { pin = it.take(LockMethod.PIN_DIGITS) },
                     onSubmit = {
                         if (pin.length == LockMethod.PIN_DIGITS) {
@@ -114,7 +129,7 @@ fun VaultUnlockScreen(
                 var cells by remember { mutableStateOf(listOf<Int>()) }
                 VaultPatternPad(
                     selected = cells,
-                    enabled = !state.busy || (canUseFingerprint && !state.pinFallback),
+                    enabled = !lockedOut && (!state.busy || (canUseFingerprint && !state.pinFallback)),
                     onChange = { cells = it },
                 )
                 Spacer(Modifier.height(16.dp))
@@ -125,7 +140,7 @@ fun VaultUnlockScreen(
                             cells = emptyList()
                         }
                     },
-                    enabled = !state.busy && cells.size >= LockMethod.PATTERN_MIN_CELLS,
+                    enabled = !lockedOut && !state.busy && cells.size >= LockMethod.PATTERN_MIN_CELLS,
                 ) {
                     Text("Desbloquear")
                 }
