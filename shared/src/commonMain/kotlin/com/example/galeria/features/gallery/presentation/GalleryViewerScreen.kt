@@ -151,7 +151,8 @@ fun GalleryViewerScreen(
                 onBack = onBack,
                 onShare = onShare,
                 onEdit = onEdit,
-                canEdit = item.mediaKind == GalleryMediaKind.IMAGE,
+                canEdit = item.mediaKind == GalleryMediaKind.IMAGE ||
+                    item.mediaKind == GalleryMediaKind.VIDEO,
                 item = item,
                 onAddToAlbum = onAddToAlbum,
                 modifier = Modifier
@@ -161,7 +162,8 @@ fun GalleryViewerScreen(
             )
             ViewerBottomBar(
                 isFavorite = isFavorite,
-                canEdit = item.mediaKind == GalleryMediaKind.IMAGE,
+                canEdit = item.mediaKind == GalleryMediaKind.IMAGE ||
+                    item.mediaKind == GalleryMediaKind.VIDEO,
                 busy = session.busy,
                 error = session.error,
                 onShare = onShare,

@@ -45,6 +45,7 @@ import com.example.galeria.features.editor.domain.EditVideoUseCase
 import com.example.galeria.features.editor.domain.ImageEditor
 import com.example.galeria.features.editor.domain.VideoEditor
 import com.example.galeria.features.editor.presentation.EditorScreen
+import com.example.galeria.features.editor.presentation.VideoEditorScreen
 import com.example.galeria.features.gallery.domain.Album
 import com.example.galeria.features.gallery.domain.AlbumId
 import com.example.galeria.features.gallery.domain.GalleryMediaKind
@@ -348,14 +349,28 @@ fun App() {
                         )
                     }
                 }
-                key.startsWith("edit") && ready?.editing != null -> EditorScreen(
-                    preview = ready.editing.preview,
-                    busy = ready.editing.busy,
-                    error = ready.editing.error,
-                    onEditChanged = galleryViewModel::previewEdit,
-                    onSave = galleryViewModel::saveEdit,
-                    onClose = galleryViewModel::closeEditor,
-                )
+                key.startsWith("edit") && ready?.editing != null -> {
+                    val editing = ready.editing
+                    if (editing.item.mediaKind == GalleryMediaKind.VIDEO) {
+                        VideoEditorScreen(
+                            uri = editing.item.publicUri,
+                            durationMs = editing.item.durationMs,
+                            busy = editing.busy,
+                            error = editing.error,
+                            onSave = galleryViewModel::saveVideoEdit,
+                            onClose = galleryViewModel::closeEditor,
+                        )
+                    } else {
+                        EditorScreen(
+                            preview = editing.preview,
+                            busy = editing.busy,
+                            error = editing.error,
+                            onEditChanged = galleryViewModel::previewEdit,
+                            onSave = galleryViewModel::saveEdit,
+                            onClose = galleryViewModel::closeEditor,
+                        )
+                    }
+                }
                 key.startsWith("pick-media") && ready != null -> AlbumMediaPickerScreen(
                     items = ready.allItems,
                     albumTitle = pendingAlbumName

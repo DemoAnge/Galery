@@ -41,4 +41,4 @@ fun normalizedRotation(degrees: Int): Int {
     }
 }
 
-internal const val MIN_TRIM_MS = 200L
+const val MIN_TRIM_MS = 200L
