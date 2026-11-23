@@ -511,13 +511,13 @@ class VaultLockViewModel(
         }
     }
 
-    fun lockVault() {
+    fun lockVault(resetIfEmpty: Boolean = true) {
         try {
             biometric.cancel()
             openGeneration += 1
             replacePlaybackTemp(null)
             clearThumbs()
-            if (repository.resetLockIfEmpty()) {
+            if (resetIfEmpty && repository.resetLockIfEmpty()) {
                 _state.value = VaultUiState.NeedsSetup
             } else {
                 repository.lock()
@@ -535,6 +535,11 @@ class VaultLockViewModel(
                 VaultUiState.NeedsSetup
             }
         }
+    }
+
+    fun lockOnBackground() {
+        if (!repository.isUnlocked()) return
+        lockVault(resetIfEmpty = false)
     }
 
     override fun onCleared() {
