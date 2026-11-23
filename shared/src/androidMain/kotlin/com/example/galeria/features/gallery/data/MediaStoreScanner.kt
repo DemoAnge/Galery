@@ -186,6 +186,45 @@ class MediaStoreScanner : MediaRepository {
         }
     }
 
+    override fun saveVideo(displayName: String, path: String) {
+        val file = java.io.File(path)
+        check(file.isFile) { "Public media insert failed" }
+        val resolver = AndroidAppContext.require().contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+            put(MediaStore.MediaColumns.MIME_TYPE, videoMime(displayName))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_MOVIES}/Galeria")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+        }
+        val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+            ?: error("Public media insert failed")
+        try {
+            val out = resolver.openOutputStream(uri) ?: error("Public media insert failed")
+            out.use { output ->
+                file.inputStream().buffered().use { input -> input.copyTo(output) }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                values.clear()
+                values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+            }
+        } catch (e: Exception) {
+            resolver.delete(uri, null, null)
+            throw e
+        }
+    }
+
+    private fun videoMime(displayName: String): String {
+        val name = displayName.lowercase()
+        return when {
+            name.endsWith(".mov") -> "video/quicktime"
+            name.endsWith(".webm") -> "video/webm"
+            else -> "video/mp4"
+        }
+    }
+
     private fun Cursor.toMediaItem(collection: Uri, kind: GalleryMediaKind): MediaItem {
         val id = getLong(getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
         val uri = ContentUris.withAppendedId(collection, id).toString()

@@ -15,6 +15,7 @@ import platform.Foundation.NSData
 import platform.Foundation.NSError
 import platform.Foundation.NSMutableData
 import platform.Foundation.NSSortDescriptor
+import platform.Foundation.NSURL
 import platform.Foundation.create
 import platform.Photos.PHAsset
 import platform.Photos.PHAssetCollection
@@ -178,6 +179,22 @@ class PhotoLibraryScanner : MediaRepository {
                 {
                     val request = PHAssetCreationRequest.creationRequestForAsset()
                     request.addResourceWithType(PHAssetResourceTypePhoto, data = data, options = null)
+                },
+                errorVar.ptr,
+            )
+            check(ok && errorVar.value == null) { "Public media insert failed" }
+        }
+    }
+
+    override fun saveVideo(displayName: String, path: String) {
+        requirePhotosAccess()
+        val url = NSURL.fileURLWithPath(path)
+        memScoped {
+            val errorVar = alloc<ObjCObjectVar<NSError?>>()
+            val ok = PHPhotoLibrary.sharedPhotoLibrary().performChangesAndWait(
+                {
+                    val request = PHAssetCreationRequest.creationRequestForAsset()
+                    request.addResourceWithType(PHAssetResourceTypeVideo, fileURL = url, options = null)
                 },
                 errorVar.ptr,
             )
