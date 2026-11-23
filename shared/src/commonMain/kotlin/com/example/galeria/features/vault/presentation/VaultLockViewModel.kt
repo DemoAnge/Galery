@@ -4,16 +4,23 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.galeria.core.encryption.DerivedKey
+import com.example.galeria.features.editor.domain.EditImageUseCase
+import com.example.galeria.features.editor.domain.ImageEdit
+import com.example.galeria.features.editor.domain.ImageEditor
+import com.example.galeria.features.editor.presentation.decodeImageBytes
 import com.example.galeria.features.vault.domain.ChangeLockUseCase
 import com.example.galeria.features.vault.domain.DeleteFromVaultUseCase
 import com.example.galeria.features.vault.domain.ExportFromVaultUseCase
 import com.example.galeria.features.vault.domain.LockMethod
+import com.example.galeria.features.vault.domain.ReplaceVaultImageUseCase
 import com.example.galeria.features.vault.domain.SetupLockUseCase
 import com.example.galeria.features.vault.domain.UnlockVaultUseCase
 import com.example.galeria.features.vault.domain.VaultItem
 import com.example.galeria.features.vault.domain.VaultMediaKind
 import com.example.galeria.features.vault.domain.VaultRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -59,6 +66,14 @@ sealed class VaultUiState {
         val error: String? = null,
         val openedCollection: String? = null,
     ) : VaultUiState()
+    data class Editing(
+        val item: VaultItem,
+        val items: List<VaultItem>,
+        val preview: ImageBitmap? = null,
+        val busy: Boolean = false,
+        val error: String? = null,
+        val openedCollection: String? = null,
+    ) : VaultUiState()
 }
 
 class VaultLockViewModel(
@@ -71,6 +86,10 @@ class VaultLockViewModel(
     private val changeLock = ChangeLockUseCase(repository)
     private val exportFromVault = ExportFromVaultUseCase(repository)
     private val deleteFromVault = DeleteFromVaultUseCase(repository)
+    private val replaceVaultImage = ReplaceVaultImageUseCase(repository)
+    private val editImage = EditImageUseCase(ImageEditor())
+    private var editorSource: ByteArray? = null
+    private var previewJob: Job? = null
 
     private val _state = MutableStateFlow<VaultUiState>(VaultUiState.Loading)
     val state: StateFlow<VaultUiState> = _state.asStateFlow()
@@ -493,6 +512,84 @@ class VaultLockViewModel(
         }
     }
 
+    fun openEditor() {
+        val current = _state.value as? VaultUiState.Viewing ?: return
+        if (current.item.mediaKind != VaultMediaKind.IMAGE) return
+        viewModelScope.launch {
+            val bytes = withContext(Dispatchers.Default) {
+                runCatching { repository.readDecrypted(current.item.id) }.getOrNull()
+            }
+            if (bytes == null) {
+                _state.value = current.copy(error = "Error al abrir el editor")
+                return@launch
+            }
+            editorSource?.fill(0)
+            editorSource = bytes
+            val preview = withContext(Dispatchers.Default) {
+                runCatching { decodeImageBytes(bytes) }.getOrNull() ?: current.image
+            }
+            _state.value = VaultUiState.Editing(
+                item = current.item,
+                items = current.items,
+                preview = preview,
+                openedCollection = current.openedCollection,
+            )
+        }
+    }
+
+    fun previewEdit(edit: ImageEdit) {
+        val current = _state.value as? VaultUiState.Editing ?: return
+        val source = editorSource ?: return
+        previewJob?.cancel()
+        previewJob = viewModelScope.launch {
+            delay(120)
+            val previewBytes = withContext(Dispatchers.Default) {
+                runCatching { editImage(source, edit, VAULT_PREVIEW_EDGE) }.getOrNull()
+            } ?: return@launch
+            val image = withContext(Dispatchers.Default) { decodeImageBytes(previewBytes) }
+            previewBytes.fill(0)
+            val latest = _state.value as? VaultUiState.Editing ?: return@launch
+            _state.value = latest.copy(preview = image)
+        }
+    }
+
+    fun saveEdit(edit: ImageEdit) {
+        val current = _state.value as? VaultUiState.Editing ?: return
+        val source = editorSource ?: return
+        _state.value = current.copy(busy = true, error = null)
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.Default) {
+                runCatching {
+                    val jpeg = editImage(source, edit, 0)
+                    replaceVaultImage(current.item.id, jpeg)
+                    jpeg.fill(0)
+                }
+            }
+            if (result.isFailure) {
+                val latest = _state.value as? VaultUiState.Editing ?: return@launch
+                _state.value = latest.copy(busy = false, error = "Error al guardar la edición")
+                return@launch
+            }
+            editorSource?.fill(0)
+            editorSource = null
+            synchronized(thumbCache) { thumbCache.remove(current.item.id.value) }
+            _state.value = unlockedState(
+                message = "Edición guardada en el Vault",
+                openedCollection = current.openedCollection,
+            )
+        }
+    }
+
+    fun closeEditor() {
+        if (_state.value !is VaultUiState.Editing) return
+        previewJob?.cancel()
+        editorSource?.fill(0)
+        editorSource = null
+        _state.value = unlockedState(
+            openedCollection = (_state.value as VaultUiState.Editing).openedCollection,
+        )
+    }
+
     fun deleteCurrent() {
         val current = _state.value as? VaultUiState.Viewing ?: return
         _state.value = current.copy(busy = true, error = null)
@@ -514,6 +611,9 @@ class VaultLockViewModel(
     fun lockVault(resetIfEmpty: Boolean = true) {
         try {
             biometric.cancel()
+            previewJob?.cancel()
+            editorSource?.fill(0)
+            editorSource = null
             openGeneration += 1
             replacePlaybackTemp(null)
             clearThumbs()
@@ -633,6 +733,8 @@ class VaultLockViewModel(
         synchronized(thumbCache) { thumbCache.clear() }
     }
 }
+
+private const val VAULT_PREVIEW_EDGE = 1280
 
 internal fun lockoutMessage(remainingMs: Long): String {
     val seconds = ((remainingMs + 999) / 1000).coerceAtLeast(1L)

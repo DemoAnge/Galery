@@ -29,6 +29,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -69,11 +71,17 @@ fun VaultGridScreen(
     onDeleteSelected: () -> Unit,
     loadThumbnail: suspend (VaultItem) -> ImageBitmap?,
 ) {
+    var searchOpen by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
     val photos = remember(state.items) { vaultPhotos(state.items) }
     val videos = remember(state.items) { vaultVideos(state.items) }
     val collections = remember(state.items) { vaultCollections(state.items) }
     val opened = remember(state.items, state.openedCollection) {
         vaultCollectionByTitle(state.items, state.openedCollection)
+    }
+    val sourceItems = opened?.items ?: state.items
+    val filtered = remember(sourceItems, query, searchOpen) {
+        if (searchOpen) filterVaultItems(sourceItems, query) else sourceItems
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -85,7 +93,16 @@ fun VaultGridScreen(
                 else -> "${state.items.size} ${if (state.items.size == 1) "privado" else "privados"}"
             },
             onBack = if (opened != null) onCloseCollection else onLeave,
-            onChangeLock = if (opened == null && !state.selecting) onChangeLock else null,
+            onChangeLock = if (opened == null && !state.selecting && !searchOpen) onChangeLock else null,
+            onSearch = if (!state.selecting) {
+                {
+                    searchOpen = !searchOpen
+                    if (!searchOpen) query = ""
+                }
+            } else {
+                null
+            },
+            searchOpen = searchOpen,
         )
         if (state.selecting) {
             VaultSelectionBar(
@@ -103,7 +120,38 @@ fun VaultGridScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }
-        if (state.offerBiometric && opened == null) {
+        if (searchOpen) {
+            TextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                placeholder = { Text("Buscar en el Vault") },
+                leadingIcon = {
+                    Icon(GaleriaIcons.SearchOutline, contentDescription = null)
+                },
+                trailingIcon = {
+                    IconButton(onClick = {
+                        searchOpen = false
+                        query = ""
+                    }) {
+                        Icon(GaleriaIcons.Close, contentDescription = "Cerrar búsqueda")
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(28.dp),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                ),
+            )
+        }
+        if (state.offerBiometric && opened == null && !searchOpen) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(
                     "¿Activar huella o Face ID como atajo? Seguirás necesitando PIN o patrón.",
@@ -120,6 +168,28 @@ fun VaultGridScreen(
             }
         }
         when {
+            searchOpen -> {
+                if (filtered.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            if (query.isBlank()) "Vault vacío." else "Sin coincidencias.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(24.dp),
+                        )
+                    }
+                } else {
+                    VaultMediaGrid(
+                        items = filtered,
+                        selectedIds = state.selectedIds,
+                        selecting = state.selecting,
+                        onOpenItem = { item -> onOpenItem(item, filtered) },
+                        onLongPress = onLongPress,
+                        onToggleSelect = onToggleSelect,
+                        loadThumbnail = loadThumbnail,
+                    )
+                }
+            }
             opened != null -> VaultMediaGrid(
                 items = opened.items,
                 selectedIds = state.selectedIds,
@@ -159,6 +229,8 @@ private fun VaultHeader(
     subtitle: String,
     onBack: () -> Unit,
     onChangeLock: (() -> Unit)? = null,
+    onSearch: (() -> Unit)? = null,
+    searchOpen: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -176,6 +248,14 @@ private fun VaultHeader(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        if (onSearch != null) {
+            IconButton(onClick = onSearch) {
+                Icon(
+                    if (searchOpen) GaleriaIcons.Close else GaleriaIcons.SearchOutline,
+                    contentDescription = if (searchOpen) "Cerrar búsqueda" else "Buscar",
+                )
+            }
         }
         if (onChangeLock != null) {
             IconButton(onClick = onChangeLock) {

@@ -48,6 +48,7 @@ fun VaultViewerScreen(
     onBack: () -> Unit,
     onExport: () -> Unit,
     onDelete: () -> Unit,
+    onEdit: () -> Unit,
     onPageChanged: (Int) -> Unit,
 ) {
     val initial = state.items.indexOfFirst { it.id == state.item.id }.coerceAtLeast(0)
@@ -153,8 +154,13 @@ fun VaultViewerScreen(
                 state.item.displayName,
                 color = Color.White,
                 style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.padding(end = 12.dp),
+                modifier = Modifier.padding(end = 8.dp),
             )
+            if (state.item.mediaKind == VaultMediaKind.IMAGE) {
+                IconButton(onClick = onEdit, enabled = !state.busy) {
+                    Icon(GaleriaIcons.Edit, contentDescription = "Editar", tint = Color.White)
+                }
+            }
         }
         if (chromeVisible) Column(
             modifier = Modifier

@@ -231,6 +231,22 @@ class VaultRepositoryImpl(
         metadataStore.save(key, items.filter { it.id !in remove })
     }
 
+    override fun replaceEncryptedImage(id: VaultItemId, jpeg: ByteArray) {
+        val key = requireSession()
+        val items = metadataStore.load(key)
+        val item = items.firstOrNull { it.id == id } ?: error("Vault item not found")
+        check(item.mediaKind == VaultMediaKind.IMAGE) { "Only images can be edited in the vault" }
+        val payload = encryptor.encrypt(jpeg, key)
+        fileStore.write(id.value, payload)
+        writeThumbnail(id.value, jpeg, isVideo = false, displayName = item.displayName, key = key)
+        metadataStore.save(
+            key,
+            items.map { current ->
+                if (current.id == id) current.copy(sizeBytes = jpeg.size.toLong()) else current
+            },
+        )
+    }
+
     override fun listItems(): List<VaultItem> {
         val key = requireSession()
         return metadataStore.load(key)

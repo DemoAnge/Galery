@@ -77,6 +77,19 @@ class VaultLayoutTest {
     }
 
     @Test
+    fun searchMatchesNameOrAlbumAndIgnoresBlankQuery() {
+        val items = listOf(
+            item("sunset", VaultMediaKind.IMAGE, album = "Cámara"),
+            item("clip", VaultMediaKind.VIDEO, album = "WhatsApp"),
+        )
+        assertEquals(1, filterVaultItems(items, "sun").size)
+        assertEquals("sunset.jpg", filterVaultItems(items, "SUN").first().displayName)
+        assertEquals(1, filterVaultItems(items, "whats").size)
+        assertEquals(2, filterVaultItems(items, "  ").size)
+        assertTrue(filterVaultItems(items, "nada").isEmpty())
+    }
+
+    @Test
     fun unlabeledItemsDoNotCreateCollections() {
         val mixed = listOf(
             item("p1", VaultMediaKind.IMAGE),

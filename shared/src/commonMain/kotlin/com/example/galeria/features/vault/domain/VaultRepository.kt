@@ -51,6 +51,8 @@ interface VaultRepository {
      */
     fun deleteFromVault(ids: List<VaultItemId>)
 
+    fun replaceEncryptedImage(id: VaultItemId, jpeg: ByteArray)
+
     fun listItems(): List<VaultItem>
 
     fun readDecrypted(id: VaultItemId): ByteArray

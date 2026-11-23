@@ -36,3 +36,12 @@ fun vaultCollectionByTitle(items: List<VaultItem>, title: String?): VaultCollect
     if (title.isNullOrBlank()) return null
     return vaultCollections(items).firstOrNull { it.title == title }
 }
+
+fun filterVaultItems(items: List<VaultItem>, query: String): List<VaultItem> {
+    val q = query.trim().lowercase()
+    if (q.isEmpty()) return items
+    return items.filter { item ->
+        item.displayName.lowercase().contains(q) ||
+            item.albumLabel.orEmpty().lowercase().contains(q)
+    }
+}

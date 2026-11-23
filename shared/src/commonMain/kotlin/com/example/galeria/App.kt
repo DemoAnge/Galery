@@ -204,7 +204,9 @@ fun App() {
             val viewing = vaultState as? VaultUiState.Viewing
             val showingPrivate =
                 vaultOpen &&
-                    (vaultState is VaultUiState.Unlocked || viewing != null)
+                    (vaultState is VaultUiState.Unlocked ||
+                        viewing != null ||
+                        vaultState is VaultUiState.Editing)
             val playingVaultVideo = viewing != null &&
                 viewing.item.mediaKind == VaultMediaKind.VIDEO &&
                 viewing.playbackUri != null
@@ -216,6 +218,7 @@ fun App() {
             ready?.viewing != null ||
             vaultState is VaultUiState.Viewing ||
             vaultState is VaultUiState.ChangingLock ||
+            vaultState is VaultUiState.Editing ||
             unlockForHide ||
             pickMediaOpen
         val selecting = ready?.selecting == true
@@ -283,6 +286,9 @@ fun App() {
         AppBackHandler(enabled = vaultState is VaultUiState.ChangingLock) {
             vaultViewModel.cancelChangeLock()
         }
+        AppBackHandler(enabled = vaultState is VaultUiState.Editing) {
+            vaultViewModel.closeEditor()
+        }
         AppBackHandler(enabled = vaultState is VaultUiState.Viewing) {
             vaultViewModel.closeViewer()
         }
@@ -316,6 +322,19 @@ fun App() {
                             onChangePin = vaultViewModel::changeLockPin,
                             onChangePattern = vaultViewModel::changeLockPattern,
                             onCancel = vaultViewModel::cancelChangeLock,
+                        )
+                    }
+                }
+                key.startsWith("vault-edit") -> {
+                    val editing = vaultState as? VaultUiState.Editing
+                    if (editing != null) {
+                        EditorScreen(
+                            preview = editing.preview,
+                            busy = editing.busy,
+                            error = editing.error,
+                            onEditChanged = vaultViewModel::previewEdit,
+                            onSave = vaultViewModel::saveEdit,
+                            onClose = vaultViewModel::closeEditor,
                         )
                     }
                 }
@@ -375,6 +394,7 @@ fun App() {
                             onBack = vaultViewModel::closeViewer,
                             onExport = vaultViewModel::exportCurrent,
                             onDelete = vaultViewModel::deleteCurrent,
+                            onEdit = vaultViewModel::openEditor,
                             onPageChanged = vaultViewModel::showItemAt,
                         )
                     }
@@ -765,7 +785,7 @@ private fun VaultHost(
             onDeleteSelected = viewModel::deleteSelected,
             loadThumbnail = viewModel::loadThumbnail,
         )
-        is VaultUiState.ChangingLock, is VaultUiState.Viewing -> Unit
+        is VaultUiState.ChangingLock, is VaultUiState.Viewing, is VaultUiState.Editing -> Unit
     }
 }
 
@@ -779,6 +799,7 @@ private fun overlayKey(
 ): String = when {
     unlockForHide -> "vault-auth"
     vaultState is VaultUiState.ChangingLock -> "vault-change"
+    vaultState is VaultUiState.Editing -> "vault-edit"
     ready?.editing != null -> "edit"
     pickMediaOpen -> "pick-media"
     ready?.viewing != null -> "view"
@@ -807,6 +828,6 @@ private fun VaultAuthHost(
             onUsePin = viewModel::usePinFallback,
             onCancelBiometric = viewModel::cancelBiometricPrompt,
         )
-        is VaultUiState.ChangingLock, is VaultUiState.Viewing -> Unit
+        is VaultUiState.ChangingLock, is VaultUiState.Viewing, is VaultUiState.Editing -> Unit
     }
 }
