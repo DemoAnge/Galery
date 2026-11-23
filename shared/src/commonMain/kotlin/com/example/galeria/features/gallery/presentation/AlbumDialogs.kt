@@ -25,17 +25,21 @@ import com.example.galeria.features.gallery.domain.Album
 
 @Composable
 fun AlbumNameDialog(
+    title: String = "Nuevo álbum o colección",
+    confirmLabel: String = "Crear",
+    initialName: String = "",
+    hint: String = "Ponle un nombre. Después puedes moverle fotos y videos.",
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var name by remember { mutableStateOf("") }
+    var name by remember(initialName) { mutableStateOf(initialName) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Nuevo álbum o colección") },
+        title = { Text(title) },
         text = {
             Column {
                 Text(
-                    "Ponle un nombre. Después puedes moverle fotos y videos.",
+                    hint,
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(Modifier.height(12.dp))
@@ -52,7 +56,7 @@ fun AlbumNameDialog(
             TextButton(
                 onClick = { onConfirm(name.trim()) },
                 enabled = name.trim().isNotEmpty(),
-            ) { Text("Crear") }
+            ) { Text(confirmLabel) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancelar") }
@@ -99,6 +103,27 @@ fun AlbumPickerDialog(
             }
         },
         confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        },
+    )
+}
+
+@Composable
+fun AlbumDeleteConfirmDialog(
+    title: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("¿Eliminar “$title”?") },
+        text = {
+            Text("El álbum desaparece. Las fotos y videos siguen en la galería.")
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("Eliminar álbum") }
+        },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancelar") }
         },

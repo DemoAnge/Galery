@@ -53,6 +53,7 @@ import com.example.galeria.features.gallery.data.CollectionStore
 import com.example.galeria.features.gallery.data.FavoritesStore
 import com.example.galeria.features.gallery.presentation.AlbumGridScreen
 import com.example.galeria.features.gallery.presentation.AlbumMediaPickerScreen
+import com.example.galeria.features.gallery.presentation.AlbumDeleteConfirmDialog
 import com.example.galeria.features.gallery.presentation.AlbumNameDialog
 import com.example.galeria.features.gallery.presentation.AlbumPickerDialog
 import com.example.galeria.features.gallery.presentation.CollectionsScreen
@@ -146,6 +147,8 @@ fun App() {
         var pendingAlbumName by remember { mutableStateOf<String?>(null) }
         var pendingTargetId by remember { mutableStateOf<String?>(null) }
         var fromCustomAlbumId by remember { mutableStateOf<String?>(null) }
+        var renameAlbumOpen by remember { mutableStateOf(false) }
+        var deleteAlbumOpen by remember { mutableStateOf(false) }
         fun currentReady() = galleryViewModel.state.value as? GalleryUiState.Ready
         fun customAlbums() = currentReady()?.albums.orEmpty().filter { it.customId != null }
         fun resetAlbumFlow() {
@@ -470,6 +473,12 @@ fun App() {
                                         onAddPhotos = ready.openedAlbum.customId?.let { id ->
                                             { requestPickMediaForAlbum(id) }
                                         },
+                                        onRename = ready.openedAlbum.customId?.let {
+                                            { renameAlbumOpen = true }
+                                        },
+                                        onDeleteAlbum = ready.openedAlbum.customId?.let {
+                                            { deleteAlbumOpen = true }
+                                        },
                                     )
                                     else -> when (tab) {
                                         AppTab.PHOTOS -> GalleryTabBody(
@@ -578,6 +587,33 @@ fun App() {
                     }
                 }
             }
+        }
+        val renamingAlbum = ready?.openedAlbum?.takeIf { renameAlbumOpen && it.customId != null }
+        if (renamingAlbum != null) {
+            val collectionId = renamingAlbum.customId ?: return@GaleriaTheme
+            AlbumNameDialog(
+                title = "Renombrar álbum",
+                confirmLabel = "Guardar",
+                initialName = renamingAlbum.title,
+                hint = "Cambia el nombre de esta colección.",
+                onConfirm = { name ->
+                    renameAlbumOpen = false
+                    galleryViewModel.renameAlbum(collectionId, name)
+                },
+                onDismiss = { renameAlbumOpen = false },
+            )
+        }
+        val deletingAlbum = ready?.openedAlbum?.takeIf { deleteAlbumOpen && it.customId != null }
+        if (deletingAlbum != null) {
+            val collectionId = deletingAlbum.customId ?: return@GaleriaTheme
+            AlbumDeleteConfirmDialog(
+                title = deletingAlbum.title,
+                onConfirm = {
+                    deleteAlbumOpen = false
+                    galleryViewModel.deleteAlbum(collectionId)
+                },
+                onDismiss = { deleteAlbumOpen = false },
+            )
         }
         if (albumNameOpen) {
             AlbumNameDialog(

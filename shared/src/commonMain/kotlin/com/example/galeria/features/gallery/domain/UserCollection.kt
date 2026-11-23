@@ -36,3 +36,14 @@ fun List<UserCollection>.movingTo(
         }
     }
 }
+
+fun List<UserCollection>.renaming(collectionId: String, title: String): List<UserCollection> {
+    val name = title.trim()
+    if (name.isEmpty()) return this
+    return map { collection ->
+        if (collection.id == collectionId) collection.copy(title = name) else collection
+    }
+}
+
+fun List<UserCollection>.without(collectionId: String): List<UserCollection> =
+    filterNot { it.id == collectionId }

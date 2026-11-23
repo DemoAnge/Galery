@@ -19,6 +19,8 @@ import com.example.galeria.features.gallery.domain.ScanMediaUseCase
 import com.example.galeria.features.gallery.domain.UserCollection
 import com.example.galeria.features.gallery.domain.movingTo
 import com.example.galeria.features.gallery.domain.newUserCollection
+import com.example.galeria.features.gallery.domain.renaming
+import com.example.galeria.features.gallery.domain.without
 import com.example.galeria.features.share.domain.ShareMediaUseCase
 import com.example.galeria.features.share.presentation.ShareRequest
 import kotlin.time.TimeSource
@@ -245,6 +247,38 @@ class GalleryViewModel(
                 selectedIds = emptySet(),
                 viewing = null,
                 message = if (itemIds.isEmpty()) "Álbum creado" else "Movido al álbum",
+            )
+        }
+    }
+
+    fun renameAlbum(collectionId: String, title: String) {
+        val name = title.trim()
+        if (name.isEmpty()) return
+        userCollections = userCollections.renaming(collectionId, name)
+        collectionStore.save(userCollections)
+        updateReady { current ->
+            val albums = mergeCustomAlbums(scannedAlbums(current.albums), current.allItems)
+            current.copy(
+                albums = albums,
+                userCollections = userCollections,
+                openedAlbum = albums.firstOrNull { it.customId == collectionId } ?: current.openedAlbum,
+                message = "Álbum renombrado",
+            )
+        }
+    }
+
+    fun deleteAlbum(collectionId: String) {
+        userCollections = userCollections.without(collectionId)
+        collectionStore.save(userCollections)
+        updateReady { current ->
+            val albums = mergeCustomAlbums(scannedAlbums(current.albums), current.allItems)
+            val keepOpen = current.openedAlbum?.customId != collectionId
+            current.copy(
+                albums = albums,
+                userCollections = userCollections,
+                openedAlbum = if (keepOpen) current.openedAlbum else null,
+                selectedIds = if (keepOpen) current.selectedIds else emptySet(),
+                message = "Álbum eliminado. Las fotos siguen en la galería.",
             )
         }
     }
