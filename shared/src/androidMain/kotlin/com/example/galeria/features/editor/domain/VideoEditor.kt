@@ -21,6 +21,7 @@ actual class VideoEditor actual constructor() {
                 output = output,
                 startMs = clamped.startMs,
                 endMs = clamped.endMs,
+                extraRotation = clamped.rotationDegrees,
             )
             return output.absolutePath
         } catch (e: Exception) {
@@ -46,6 +47,7 @@ private fun copyTrimmed(
     output: File,
     startMs: Long,
     endMs: Long,
+    extraRotation: Int,
 ) {
     val context = AndroidAppContext.require()
     val extractor = MediaExtractor()
@@ -78,7 +80,7 @@ private fun copyTrimmed(
             indexMap[i] = muxer.addTrack(format)
         }
         check(hasVideo && indexMap.isNotEmpty()) { "Video edit failed" }
-        muxer.setOrientationHint(originalRotation(source))
+        muxer.setOrientationHint(normalizedRotation(originalRotation(source) + extraRotation))
         muxer.start()
         started = true
         extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
