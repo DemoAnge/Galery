@@ -405,6 +405,11 @@ class GalleryViewModel(
         updateReady { it.copy(selectedIds = emptySet()) }
     }
 
+    fun selectAll(ids: List<String>) {
+        if (ids.isEmpty()) return
+        updateReady { it.copy(selectedIds = ids.toSet()) }
+    }
+
     fun editItem(item: MediaItem) {
         if (item.mediaKind != GalleryMediaKind.IMAGE) return
         viewModelScope.launch {

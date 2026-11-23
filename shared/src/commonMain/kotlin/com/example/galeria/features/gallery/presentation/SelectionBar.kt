@@ -29,6 +29,7 @@ fun SelectionBar(
     onMoveToVault: () -> Unit,
     onDelete: () -> Unit,
     onRemoveFromAlbum: (() -> Unit)? = null,
+    onSelectAll: (() -> Unit)? = null,
 ) {
     var confirmMove by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -52,6 +53,11 @@ fun SelectionBar(
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.weight(1f),
             )
+            if (onSelectAll != null) {
+                TextButton(onClick = onSelectAll) {
+                    Text("Todo")
+                }
+            }
             IconButton(onClick = onShare) {
                 Icon(GaleriaIcons.Share, contentDescription = "Compartir")
             }

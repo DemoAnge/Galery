@@ -64,6 +64,8 @@ import com.example.galeria.features.gallery.presentation.GalleryUiState
 import com.example.galeria.features.gallery.presentation.GalleryViewModel
 import com.example.galeria.features.gallery.presentation.GalleryViewerScreen
 import com.example.galeria.features.gallery.presentation.ALL_VIDEOS_KEY
+import com.example.galeria.features.gallery.presentation.classifyVideoAlbums
+import com.example.galeria.features.gallery.presentation.videoAlbumKey
 import com.example.galeria.features.gallery.presentation.PhotosScreen
 import com.example.galeria.features.gallery.presentation.SearchScreen
 import com.example.galeria.features.gallery.presentation.VIDEOS_COLLECTION_TITLE
@@ -419,6 +421,11 @@ fun App() {
                     Box(Modifier.fillMaxSize().padding(padding)) {
                         Column(Modifier.fillMaxSize()) {
                             if (selecting && !vaultOpen) {
+                                val visibleIds = visibleGalleryIds(
+                                    ready = ready,
+                                    tab = tab,
+                                    videoAlbumKey = videoAlbumKey,
+                                )
                                 SelectionBar(
                                     count = ready?.selectedIds?.size ?: 0,
                                     onClose = galleryViewModel::clearSelection,
@@ -438,6 +445,9 @@ fun App() {
                                                 ready.selectedIds.toList(),
                                             )
                                         }
+                                    },
+                                    onSelectAll = {
+                                        galleryViewModel.selectAll(visibleIds)
                                     },
                                 )
                             }
@@ -853,6 +863,25 @@ private fun overlayKey(
     searchOpen -> "search"
     vaultOpen -> "vault"
     else -> "main"
+}
+
+private fun visibleGalleryIds(
+    ready: GalleryUiState.Ready?,
+    tab: AppTab,
+    videoAlbumKey: String,
+): List<String> {
+    if (ready == null) return emptyList()
+    ready.openedAlbum?.let { return it.items.map { item -> item.id } }
+    if (tab == AppTab.VIDEOS) {
+        val videos = ready.allItems.filter { it.mediaKind == GalleryMediaKind.VIDEO }
+        if (videoAlbumKey == ALL_VIDEOS_KEY) return videos.map { it.id }
+        return classifyVideoAlbums(ready.albums, videos)
+            .firstOrNull { videoAlbumKey(it) == videoAlbumKey }
+            ?.items
+            ?.map { it.id }
+            .orEmpty()
+    }
+    return ready.allItems.map { it.id }
 }
 
 @Composable
