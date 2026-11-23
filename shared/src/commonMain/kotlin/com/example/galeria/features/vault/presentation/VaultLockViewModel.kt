@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.galeria.core.encryption.DerivedKey
+import com.example.galeria.features.vault.domain.ChangeLockUseCase
 import com.example.galeria.features.vault.domain.ExportFromVaultUseCase
 import com.example.galeria.features.vault.domain.LockMethod
 import com.example.galeria.features.vault.domain.SetupLockUseCase
@@ -38,6 +39,13 @@ sealed class VaultUiState {
         val message: String? = null,
         val openedCollection: String? = null,
     ) : VaultUiState()
+    data class ChangingLock(
+        val currentMethod: LockMethod,
+        val items: List<VaultItem>,
+        val openedCollection: String? = null,
+        val busy: Boolean = false,
+        val error: String? = null,
+    ) : VaultUiState()
     data class Viewing(
         val item: VaultItem,
         val items: List<VaultItem>,
@@ -56,6 +64,7 @@ class VaultLockViewModel(
 
     private val setupLock = SetupLockUseCase(repository)
     private val unlockVault = UnlockVaultUseCase(repository)
+    private val changeLock = ChangeLockUseCase(repository)
     private val exportFromVault = ExportFromVaultUseCase(repository)
 
     private val _state = MutableStateFlow<VaultUiState>(VaultUiState.Loading)
@@ -229,6 +238,53 @@ class VaultLockViewModel(
     fun skipBiometric() {
         val current = _state.value as? VaultUiState.Unlocked ?: return
         _state.value = current.copy(offerBiometric = false)
+    }
+
+    fun startChangeLock() {
+        val current = _state.value as? VaultUiState.Unlocked ?: return
+        val method = repository.configuredLockMethod() ?: return
+        _state.value = VaultUiState.ChangingLock(
+            currentMethod = method,
+            items = current.items,
+            openedCollection = current.openedCollection,
+        )
+    }
+
+    fun cancelChangeLock() {
+        val current = _state.value as? VaultUiState.ChangingLock ?: return
+        _state.value = unlockedState(openedCollection = current.openedCollection)
+    }
+
+    fun changeLockPin(currentSecret: CharArray, pin: CharArray) {
+        applyLockChange(currentSecret) {
+            try {
+                changeLock.changeToPin(currentSecret, pin)
+            } finally {
+                pin.fill('\u0000')
+            }
+        }
+    }
+
+    fun changeLockPattern(currentSecret: CharArray, cells: IntArray) {
+        applyLockChange(currentSecret) { changeLock.changeToPattern(currentSecret, cells) }
+    }
+
+    private fun applyLockChange(currentSecret: CharArray, block: () -> Unit) {
+        val current = _state.value as? VaultUiState.ChangingLock ?: return
+        _state.value = current.copy(busy = true, error = null)
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.Default) { block() }
+                _state.value = unlockedState(
+                    message = "Candado actualizado",
+                    openedCollection = current.openedCollection,
+                )
+            } catch (_: Exception) {
+                _state.value = current.copy(busy = false, error = "El candado actual no coincide")
+            } finally {
+                currentSecret.fill('\u0000')
+            }
+        }
     }
 
     fun openItem(item: VaultItem, collection: List<VaultItem> = emptyList()) {

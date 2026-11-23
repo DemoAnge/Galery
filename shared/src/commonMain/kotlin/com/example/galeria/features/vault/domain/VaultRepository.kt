@@ -16,6 +16,8 @@ interface VaultRepository {
 
     fun setupLock(method: LockMethod, secret: CharArray)
 
+    fun changeLock(currentSecret: CharArray, newMethod: LockMethod, newSecret: CharArray)
+
     fun verifyAndUnlock(secret: CharArray): Boolean
 
     fun failedUnlockAttempts(): Int

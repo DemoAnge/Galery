@@ -3,7 +3,9 @@ package com.example.galeria.features.vault.presentation
 import com.example.galeria.features.vault.domain.VaultItem
 import com.example.galeria.features.vault.domain.VaultItemId
 import com.example.galeria.features.vault.domain.VaultMediaKind
+import com.example.galeria.features.vault.domain.LockMethod
 import com.example.galeria.features.vault.domain.allowsPinRecovery
+import com.example.galeria.features.vault.domain.requirePin
 import com.example.galeria.features.vault.domain.lockoutDelayMs
 import com.example.galeria.features.vault.domain.lockoutRemainingMs
 import com.example.galeria.features.vault.domain.shouldPurgeOrphanSecrets
@@ -57,6 +59,12 @@ class VaultLayoutTest {
     fun missingSandboxMarkerPurgesLeftoverSecrets() {
         assertTrue(shouldPurgeOrphanSecrets(hasInstallMarker = false))
         assertFalse(shouldPurgeOrphanSecrets(hasInstallMarker = true))
+    }
+
+    @Test
+    fun pinMustBeSixDigitsToChangeTheLock() {
+        requirePin(CharArray(LockMethod.PIN_DIGITS) { '1' })
+        assertEquals(LockMethod.PIN_DIGITS, LockMethod.PIN_MIN_DIGITS)
     }
 
     @Test

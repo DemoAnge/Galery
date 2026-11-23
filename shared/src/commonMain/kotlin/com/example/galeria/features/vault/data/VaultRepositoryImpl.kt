@@ -66,6 +66,31 @@ class VaultRepositoryImpl(
         }
     }
 
+    override fun changeLock(
+        currentSecret: CharArray,
+        newMethod: LockMethod,
+        newSecret: CharArray,
+    ) {
+        val dek = requireSession()
+        check(verifyCurrentSecret(currentSecret)) { "Current lock secret is wrong" }
+        val salt = keyDeriver.generateSalt()
+        val kek = keyDeriver.derive(newSecret, salt)
+        try {
+            val dekCopy = dek.asBytes()
+            val wrapped = try {
+                encryptor.encrypt(dekCopy, kek)
+            } finally {
+                dekCopy.fill(0)
+            }
+            secureKeyStore.write(ID_SALT, salt)
+            secureKeyStore.write(ID_WRAPPED_DEK, wrapped.toFileBytes())
+            secureKeyStore.write(ID_LOCK_METHOD, newMethod.name.encodeToByteArray())
+            clearFailedUnlocks()
+        } finally {
+            kek.clear()
+        }
+    }
+
     override fun verifyAndUnlock(secret: CharArray): Boolean {
         if (lockoutRemainingMs() > 0L) return false
         val salt = secureKeyStore.read(ID_SALT) ?: return false
@@ -378,6 +403,26 @@ class VaultRepositoryImpl(
             remaining = remaining ushr 8
         }
         secureKeyStore.write(id, bytes)
+    }
+
+    private fun verifyCurrentSecret(secret: CharArray): Boolean {
+        val salt = secureKeyStore.read(ID_SALT) ?: return false
+        val wrappedBytes = secureKeyStore.read(ID_WRAPPED_DEK) ?: return false
+        val kek = keyDeriver.derive(secret, salt)
+        return try {
+            val dekBytes = encryptor.decrypt(wrappedBytes.toAesGcmPayload(), kek)
+            val session = sessionKey?.asBytes()
+            try {
+                session != null && session.contentEquals(dekBytes)
+            } finally {
+                dekBytes.fill(0)
+                session?.fill(0)
+            }
+        } catch (_: Exception) {
+            false
+        } finally {
+            kek.clear()
+        }
     }
 
     private fun requireSession(): DerivedKey =

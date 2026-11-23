@@ -57,6 +57,7 @@ fun VaultGridScreen(
     onCloseCollection: () -> Unit,
     onEnableBiometric: () -> Unit,
     onSkipBiometric: () -> Unit,
+    onChangeLock: () -> Unit,
     loadThumbnail: suspend (VaultItem) -> ImageBitmap?,
 ) {
     val photos = remember(state.items) { vaultPhotos(state.items) }
@@ -75,6 +76,7 @@ fun VaultGridScreen(
                 else -> "${state.items.size} ${if (state.items.size == 1) "privado" else "privados"}"
             },
             onBack = if (opened != null) onCloseCollection else onLeave,
+            onChangeLock = if (opened == null) onChangeLock else null,
         )
         if (state.message != null) {
             Text(
@@ -131,6 +133,7 @@ private fun VaultHeader(
     title: String,
     subtitle: String,
     onBack: () -> Unit,
+    onChangeLock: (() -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
@@ -148,6 +151,11 @@ private fun VaultHeader(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        if (onChangeLock != null) {
+            IconButton(onClick = onChangeLock) {
+                Icon(GaleriaIcons.Edit, contentDescription = "Cambiar PIN o patrón")
+            }
         }
     }
 }

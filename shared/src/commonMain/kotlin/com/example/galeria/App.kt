@@ -68,6 +68,7 @@ import com.example.galeria.features.share.presentation.ShareSheet
 import com.example.galeria.features.vault.data.VaultComponent
 import com.example.galeria.features.vault.data.createHideInVault
 import com.example.galeria.features.vault.presentation.BiometricUnlock
+import com.example.galeria.features.vault.presentation.VaultChangeLockScreen
 import com.example.galeria.features.vault.presentation.VaultGridScreen
 import com.example.galeria.features.vault.presentation.VaultLockViewModel
 import com.example.galeria.features.vault.presentation.VaultSetupScreen
@@ -200,6 +201,7 @@ fun App() {
         val overlay = ready?.editing != null ||
             ready?.viewing != null ||
             vaultState is VaultUiState.Viewing ||
+            vaultState is VaultUiState.ChangingLock ||
             unlockForHide ||
             pickMediaOpen
         val selecting = ready?.selecting == true
@@ -255,6 +257,9 @@ fun App() {
         AppBackHandler(enabled = selecting && !overlay) {
             galleryViewModel.clearSelection()
         }
+        AppBackHandler(enabled = vaultState is VaultUiState.ChangingLock) {
+            vaultViewModel.cancelChangeLock()
+        }
         AppBackHandler(enabled = vaultState is VaultUiState.Viewing) {
             vaultViewModel.closeViewer()
         }
@@ -278,6 +283,19 @@ fun App() {
                     viewModel = vaultViewModel,
                     state = vaultState,
                 )
+                key.startsWith("vault-change") -> {
+                    val changing = vaultState as? VaultUiState.ChangingLock
+                    if (changing != null) {
+                        VaultChangeLockScreen(
+                            currentMethod = changing.currentMethod,
+                            busy = changing.busy,
+                            error = changing.error,
+                            onChangePin = vaultViewModel::changeLockPin,
+                            onChangePattern = vaultViewModel::changeLockPattern,
+                            onCancel = vaultViewModel::cancelChangeLock,
+                        )
+                    }
+                }
                 key.startsWith("edit") && ready?.editing != null -> EditorScreen(
                     preview = ready.editing.preview,
                     busy = ready.editing.busy,
@@ -715,9 +733,10 @@ private fun VaultHost(
             onCloseCollection = viewModel::closeCollection,
             onEnableBiometric = viewModel::enableBiometric,
             onSkipBiometric = viewModel::skipBiometric,
+            onChangeLock = viewModel::startChangeLock,
             loadThumbnail = viewModel::loadThumbnail,
         )
-        is VaultUiState.Viewing -> Unit
+        is VaultUiState.ChangingLock, is VaultUiState.Viewing -> Unit
     }
 }
 
@@ -730,6 +749,7 @@ private fun overlayKey(
     pickMediaOpen: Boolean,
 ): String = when {
     unlockForHide -> "vault-auth"
+    vaultState is VaultUiState.ChangingLock -> "vault-change"
     ready?.editing != null -> "edit"
     pickMediaOpen -> "pick-media"
     ready?.viewing != null -> "view"
@@ -758,6 +778,6 @@ private fun VaultAuthHost(
             onUsePin = viewModel::usePinFallback,
             onCancelBiometric = viewModel::cancelBiometricPrompt,
         )
-        is VaultUiState.Viewing -> Unit
+        is VaultUiState.ChangingLock, is VaultUiState.Viewing -> Unit
     }
 }
