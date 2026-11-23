@@ -47,11 +47,13 @@ fun VaultViewerScreen(
     state: VaultUiState.Viewing,
     onBack: () -> Unit,
     onExport: () -> Unit,
+    onDelete: () -> Unit,
     onPageChanged: (Int) -> Unit,
 ) {
     val initial = state.items.indexOfFirst { it.id == state.item.id }.coerceAtLeast(0)
     val pagerState = rememberPagerState(initialPage = initial, pageCount = { state.items.size.coerceAtLeast(1) })
     var chromeVisible by remember { mutableStateOf(true) }
+    var confirmDelete by remember { mutableStateOf(false) }
     val chromeVisibleState = rememberUpdatedState(chromeVisible)
     LaunchedEffect(pagerState.settledPage) {
         onPageChanged(pagerState.settledPage)
@@ -175,7 +177,20 @@ fun VaultViewerScreen(
                         color = Color.White,
                     )
                 }
+                TextButton(onClick = { confirmDelete = true }, enabled = !state.busy) {
+                    Text("Borrar", color = Color.White)
+                }
             }
+        }
+        if (confirmDelete) {
+            VaultDeleteConfirmDialog(
+                count = 1,
+                onConfirm = {
+                    confirmDelete = false
+                    onDelete()
+                },
+                onDismiss = { confirmDelete = false },
+            )
         }
     }
 }

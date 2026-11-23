@@ -222,6 +222,15 @@ class VaultRepositoryImpl(
         metadataStore.save(key, items.filter { it.id != id })
     }
 
+    override fun deleteFromVault(ids: List<VaultItemId>) {
+        if (ids.isEmpty()) return
+        val key = requireSession()
+        val remove = ids.toSet()
+        val items = metadataStore.load(key)
+        items.filter { it.id in remove }.forEach { deleteItemFiles(it.id.value) }
+        metadataStore.save(key, items.filter { it.id !in remove })
+    }
+
     override fun listItems(): List<VaultItem> {
         val key = requireSession()
         return metadataStore.load(key)

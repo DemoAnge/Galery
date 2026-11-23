@@ -351,6 +351,7 @@ fun App() {
                             state = viewing,
                             onBack = vaultViewModel::closeViewer,
                             onExport = vaultViewModel::exportCurrent,
+                            onDelete = vaultViewModel::deleteCurrent,
                             onPageChanged = vaultViewModel::showItemAt,
                         )
                     }

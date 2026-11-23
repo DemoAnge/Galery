@@ -41,7 +41,7 @@ actual class VaultFileStore actual constructor() {
 
     actual fun delete(itemId: String) {
         requireValidSecretId(itemId)
-        NSFileManager.defaultManager.removeItemAtURL(fileUrl(itemId), null)
+        overwriteThenDelete(fileUrl(itemId))
     }
 
     actual fun exists(itemId: String): Boolean {
@@ -67,8 +67,23 @@ actual class VaultFileStore actual constructor() {
             val fileName = name as? String ?: return@forEach
             if (fileName == INSTALL_MARKER) return@forEach
             val child = dir.URLByAppendingPathComponent(fileName) ?: return@forEach
-            manager.removeItemAtURL(child, null)
+            overwriteThenDelete(child)
         }
+    }
+
+    private fun overwriteThenDelete(url: NSURL) {
+        val path = url.path
+        val manager = NSFileManager.defaultManager
+        if (path == null || !manager.fileExistsAtPath(path)) return
+        runCatching {
+            val attrs = manager.attributesOfItemAtPath(path, error = null)
+            val size = (attrs?.get(platform.Foundation.NSFileSize) as? platform.Foundation.NSNumber)?.longValue ?: 0L
+            if (size > 0L) {
+                val n = minOf(size, 8L * 1024 * 1024).toInt().coerceAtLeast(1)
+                ByteArray(n).toNSData().writeToURL(url, atomically = true)
+            }
+        }
+        manager.removeItemAtURL(url, null)
     }
 
     private fun fileUrl(itemId: String): NSURL =

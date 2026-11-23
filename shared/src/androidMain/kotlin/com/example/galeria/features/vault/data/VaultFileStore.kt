@@ -33,7 +33,8 @@ actual class VaultFileStore actual constructor() {
 
     actual fun delete(itemId: String) {
         requireValidSecretId(itemId)
-        fileFor(itemId).delete()
+        val file = fileFor(itemId)
+        overwriteThenDelete(file)
     }
 
     actual fun exists(itemId: String): Boolean {
@@ -56,9 +57,33 @@ actual class VaultFileStore actual constructor() {
         if (!dir.exists()) return
         dir.listFiles()?.forEach { file ->
             if (file.name != INSTALL_MARKER) {
-                file.delete()
+                overwriteThenDelete(file)
             }
         }
+    }
+
+    private fun overwriteThenDelete(file: File) {
+        if (!file.exists() || file.isDirectory) {
+            file.delete()
+            return
+        }
+        runCatching {
+            val length = file.length()
+            if (length > 0L) {
+                file.outputStream().use { out ->
+                    val zeros = ByteArray(minOf(64 * 1024, length.coerceAtMost(8L * 1024 * 1024).toInt()).coerceAtLeast(1))
+                    var remaining = minOf(length, 8L * 1024 * 1024)
+                    while (remaining > 0L) {
+                        val n = minOf(zeros.size.toLong(), remaining).toInt()
+                        out.write(zeros, 0, n)
+                        remaining -= n
+                    }
+                    out.flush()
+                    out.fd.sync()
+                }
+            }
+        }
+        file.delete()
     }
 
     private fun fileFor(itemId: String): File = File(dir, "$itemId.bin")

@@ -45,6 +45,12 @@ interface VaultRepository {
      */
     fun exportToPublicStorage(id: VaultItemId)
 
+    /**
+     * Borra del sandbox cifrado. No reinserta en el almacenamiento público
+     * y no se puede deshacer.
+     */
+    fun deleteFromVault(ids: List<VaultItemId>)
+
     fun listItems(): List<VaultItem>
 
     fun readDecrypted(id: VaultItemId): ByteArray

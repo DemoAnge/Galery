@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.galeria.core.encryption.DerivedKey
 import com.example.galeria.features.vault.domain.ChangeLockUseCase
+import com.example.galeria.features.vault.domain.DeleteFromVaultUseCase
 import com.example.galeria.features.vault.domain.ExportFromVaultUseCase
 import com.example.galeria.features.vault.domain.LockMethod
 import com.example.galeria.features.vault.domain.SetupLockUseCase
@@ -66,6 +67,7 @@ class VaultLockViewModel(
     private val unlockVault = UnlockVaultUseCase(repository)
     private val changeLock = ChangeLockUseCase(repository)
     private val exportFromVault = ExportFromVaultUseCase(repository)
+    private val deleteFromVault = DeleteFromVaultUseCase(repository)
 
     private val _state = MutableStateFlow<VaultUiState>(VaultUiState.Loading)
     val state: StateFlow<VaultUiState> = _state.asStateFlow()
@@ -428,6 +430,24 @@ class VaultLockViewModel(
                 )
             } catch (_: Exception) {
                 _state.value = current.copy(busy = false, error = "Error al exportar")
+            }
+        }
+    }
+
+    fun deleteCurrent() {
+        val current = _state.value as? VaultUiState.Viewing ?: return
+        _state.value = current.copy(busy = true, error = null)
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.Default) { deleteFromVault(current.item.id) }
+                replacePlaybackTemp(null)
+                synchronized(thumbCache) { thumbCache.remove(current.item.id.value) }
+                _state.value = unlockedState(
+                    message = "Borrado del disco. No se puede recuperar.",
+                    openedCollection = current.openedCollection,
+                )
+            } catch (_: Exception) {
+                _state.value = current.copy(busy = false, error = "Error al borrar")
             }
         }
     }
