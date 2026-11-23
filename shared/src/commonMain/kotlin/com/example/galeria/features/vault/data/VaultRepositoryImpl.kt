@@ -6,6 +6,7 @@ import com.example.galeria.core.encryption.KeyDeriver
 import com.example.galeria.core.securestorage.SecureKeyStore
 import com.example.galeria.features.vault.domain.ExternalMediaSource
 import com.example.galeria.features.vault.domain.LockMethod
+import com.example.galeria.features.vault.domain.shouldPurgeOrphanSecrets
 import com.example.galeria.features.vault.domain.shouldResetLockWhenLeaving
 import com.example.galeria.features.vault.domain.VaultItem
 import com.example.galeria.features.vault.domain.VaultItemId
@@ -24,6 +25,10 @@ class VaultRepositoryImpl(
 
     private var sessionKey: DerivedKey? = null
     private val thumbCreateLock = Any()
+
+    init {
+        purgeOrphansIfFreshInstall()
+    }
 
     override fun isLockConfigured(): Boolean = secureKeyStore.contains(ID_WRAPPED_DEK)
 
@@ -260,6 +265,13 @@ class VaultRepositoryImpl(
         } catch (_: Exception) {
             false
         }
+    }
+
+    override fun purgeOrphansIfFreshInstall() {
+        if (!shouldPurgeOrphanSecrets(fileStore.hasInstallMarker())) return
+        wipeLock()
+        fileStore.wipeAll()
+        fileStore.markInstalled()
     }
 
     private fun writeThumbnail(

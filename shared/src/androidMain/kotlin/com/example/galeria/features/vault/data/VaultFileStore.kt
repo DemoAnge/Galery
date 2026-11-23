@@ -41,6 +41,26 @@ actual class VaultFileStore actual constructor() {
         return fileFor(itemId).exists()
     }
 
+    actual fun hasInstallMarker(): Boolean = File(dir, INSTALL_MARKER).exists()
+
+    actual fun markInstalled() {
+        ensureDir()
+        val marker = File(dir, INSTALL_MARKER)
+        if (!marker.exists()) {
+            marker.writeText("1")
+        }
+        lockDown(marker)
+    }
+
+    actual fun wipeAll() {
+        if (!dir.exists()) return
+        dir.listFiles()?.forEach { file ->
+            if (file.name != INSTALL_MARKER) {
+                file.delete()
+            }
+        }
+    }
+
     private fun fileFor(itemId: String): File = File(dir, "$itemId.bin")
 
     private fun ensureDir() {
@@ -65,5 +85,6 @@ actual class VaultFileStore actual constructor() {
     private companion object {
         const val DIR = "vault"
         const val NOMEDIA = ".nomedia"
+        const val INSTALL_MARKER = ".install"
     }
 }

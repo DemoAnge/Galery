@@ -8,6 +8,8 @@ import kotlinx.cinterop.usePinned
 import platform.Foundation.NSApplicationSupportDirectory
 import platform.Foundation.NSData
 import platform.Foundation.NSFileManager
+import platform.Foundation.NSFileProtectionComplete
+import platform.Foundation.NSFileProtectionKey
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLIsExcludedFromBackupKey
 import platform.Foundation.NSUserDomainMask
@@ -47,9 +49,35 @@ actual class VaultFileStore actual constructor() {
         return NSFileManager.defaultManager.fileExistsAtPath(fileUrl(itemId).path ?: return false)
     }
 
+    actual fun hasInstallMarker(): Boolean {
+        val path = markerUrl().path ?: return false
+        return NSFileManager.defaultManager.fileExistsAtPath(path)
+    }
+
+    actual fun markInstalled() {
+        val data = "1".encodeToByteArray().toNSData()
+        data.writeToURL(markerUrl(), atomically = true)
+    }
+
+    actual fun wipeAll() {
+        val manager = NSFileManager.defaultManager
+        val path = dir.path ?: return
+        val contents = manager.contentsOfDirectoryAtPath(path, error = null) ?: return
+        contents.forEach { name ->
+            val fileName = name as? String ?: return@forEach
+            if (fileName == INSTALL_MARKER) return@forEach
+            val child = dir.URLByAppendingPathComponent(fileName) ?: return@forEach
+            manager.removeItemAtURL(child, null)
+        }
+    }
+
     private fun fileUrl(itemId: String): NSURL =
         dir.URLByAppendingPathComponent("$itemId.bin")
             ?: error("Vault file path failed")
+
+    private fun markerUrl(): NSURL =
+        dir.URLByAppendingPathComponent(INSTALL_MARKER)
+            ?: error("Vault marker path failed")
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -63,13 +91,19 @@ private fun resolveVaultDir(): NSURL {
         error = null,
     ) ?: error("Vault directory unavailable")
     val dir = base.URLByAppendingPathComponent(VAULT_DIR) ?: error("Vault directory unavailable")
+    val protection = mapOf<Any?, Any?>(NSFileProtectionKey to NSFileProtectionComplete)
     if (!manager.fileExistsAtPath(dir.path ?: "")) {
         manager.createDirectoryAtURL(
             url = dir,
             withIntermediateDirectories = true,
-            attributes = null,
+            attributes = protection,
             error = null,
         )
+    } else {
+        val path = dir.path
+        if (path != null) {
+            manager.setAttributes(protection, ofItemAtPath = path, error = null)
+        }
     }
     dir.setResourceValue(
         NSNumber.numberWithBool(true),
@@ -80,6 +114,7 @@ private fun resolveVaultDir(): NSURL {
 }
 
 private const val VAULT_DIR = "galeria-vault"
+private const val INSTALL_MARKER = ".install"
 
 @OptIn(ExperimentalForeignApi::class)
 private fun ByteArray.toNSData(): NSData {

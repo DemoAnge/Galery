@@ -10,6 +10,9 @@ expect class VaultFileStore() {
     fun read(itemId: String): AesGcmPayload
     fun delete(itemId: String)
     fun exists(itemId: String): Boolean
+    fun hasInstallMarker(): Boolean
+    fun markInstalled()
+    fun wipeAll()
 }
 
 internal const val VAULT_METADATA_FILE_ID: String = "vault.metadata"

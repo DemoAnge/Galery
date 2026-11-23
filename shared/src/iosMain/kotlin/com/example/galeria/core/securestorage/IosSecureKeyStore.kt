@@ -23,6 +23,8 @@ import platform.Security.kSecAttrAccount
 import platform.Security.kSecAttrAccessible
 import platform.Security.kSecAttrAccessibleWhenUnlockedThisDeviceOnly
 import platform.Security.kSecAttrService
+import platform.Security.kSecAttrSynchronizable
+import platform.CoreFoundation.kCFBooleanFalse
 import platform.Security.kSecClass
 import platform.Security.kSecClassGenericPassword
 import platform.Security.kSecMatchLimit
@@ -46,6 +48,7 @@ class IosSecureKeyStore : SecureKeyStore {
         val status = withQuery(id) { dict ->
             dict.put(kSecValueData, data)
             dict.put(kSecAttrAccessible, kSecAttrAccessibleWhenUnlockedThisDeviceOnly)
+            dict.put(kSecAttrSynchronizable, kCFBooleanFalse)
             SecItemAdd(dict.asCfDictionary(), null)
         }
         check(status == errSecSuccess) { "Keychain write failed: $status" }

@@ -60,4 +60,10 @@ interface VaultRepository {
     fun unlockWithDek(dekBytes: ByteArray): Boolean
 
     fun unlockWithStoredDeviceKey(): Boolean
+
+    /**
+     * Si el sandbox no tiene marcador de instalación (app reinstalada o
+     * datos borrados), elimina secretos huérfanos. No recupera el vault.
+     */
+    fun purgeOrphansIfFreshInstall()
 }
