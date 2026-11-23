@@ -5,7 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.galeria.core.HideInVault
 import com.example.galeria.features.editor.domain.EditImageUseCase
+import com.example.galeria.features.editor.domain.EditVideoUseCase
 import com.example.galeria.features.editor.domain.ImageEdit
+import com.example.galeria.features.editor.domain.VideoEdit
+import com.example.galeria.features.editor.domain.deleteEditedVideoFile
 import com.example.galeria.features.editor.presentation.decodeImageBytes
 import com.example.galeria.features.gallery.domain.Album
 import com.example.galeria.features.gallery.domain.AlbumId
@@ -76,6 +79,7 @@ class GalleryViewModel(
     private val scanMedia: ScanMediaUseCase,
     private val mediaRepository: MediaRepository,
     private val editImage: EditImageUseCase,
+    private val editVideo: EditVideoUseCase,
     private val hideInVault: HideInVault,
     private val permission: MediaPermission,
     private val shareMedia: ShareMediaUseCase,
@@ -411,6 +415,19 @@ class GalleryViewModel(
     }
 
     fun editItem(item: MediaItem) {
+        if (item.mediaKind == GalleryMediaKind.VIDEO) {
+            viewModelScope.launch {
+                val image = decodeItem(item)
+                val viewing = ViewerSession(items = listOf(item), index = 0, image = image)
+                updateReady {
+                    it.copy(
+                        viewing = viewing,
+                        editing = EditorSession(item = item, viewing = viewing, preview = image),
+                    )
+                }
+            }
+            return
+        }
         if (item.mediaKind != GalleryMediaKind.IMAGE) return
         viewModelScope.launch {
             val image = decodeItem(item)
@@ -436,6 +453,18 @@ class GalleryViewModel(
     fun openEditor() {
         val ready = ready() ?: return
         val viewing = ready.viewing ?: return
+        if (viewing.item.mediaKind == GalleryMediaKind.VIDEO) {
+            updateReady {
+                it.copy(
+                    editing = EditorSession(
+                        item = viewing.item,
+                        viewing = viewing,
+                        preview = viewing.image,
+                    ),
+                )
+            }
+            return
+        }
         if (viewing.item.mediaKind != GalleryMediaKind.IMAGE) return
         viewModelScope.launch {
             val bytes = withContext(Dispatchers.Default) {
@@ -499,6 +528,38 @@ class GalleryViewModel(
                 return@launch
             }
             wipeEditorSource()
+            val albums = withContext(Dispatchers.Default) {
+                runCatching { scanMedia() }.getOrDefault(emptyList())
+            }
+            _state.value = applyScanned(_state.value, albums).copy(
+                editing = null,
+                viewing = null,
+                message = "Edición guardada",
+            )
+        }
+    }
+
+    fun saveVideoEdit(edit: VideoEdit) {
+        val current = ready()?.editing ?: return
+        if (current.item.mediaKind != GalleryMediaKind.VIDEO) return
+        updateReady { it.copy(editing = current.copy(busy = true, error = null)) }
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.Default) {
+                runCatching {
+                    val path = editVideo(current.item.publicUri, edit, current.item.durationMs)
+                    try {
+                        mediaRepository.saveVideo(editedVideoName(current.item.displayName), path)
+                    } finally {
+                        deleteEditedVideoFile(path)
+                    }
+                }
+            }
+            if (result.isFailure) {
+                updateReady {
+                    it.copy(editing = it.editing?.copy(busy = false, error = "Error al guardar la edición"))
+                }
+                return@launch
+            }
             val albums = withContext(Dispatchers.Default) {
                 runCatching { scanMedia() }.getOrDefault(emptyList())
             }
@@ -788,4 +849,10 @@ private fun editedName(original: String): String {
     val dot = original.lastIndexOf('.')
     val base = if (dot > 0) original.substring(0, dot) else original
     return "${base}_edit.jpg"
+}
+
+private fun editedVideoName(original: String): String {
+    val dot = original.lastIndexOf('.')
+    val base = if (dot > 0) original.substring(0, dot) else original
+    return "${base}_edit.mp4"
 }

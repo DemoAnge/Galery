@@ -41,7 +41,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.galeria.features.editor.domain.EditImageUseCase
+import com.example.galeria.features.editor.domain.EditVideoUseCase
 import com.example.galeria.features.editor.domain.ImageEditor
+import com.example.galeria.features.editor.domain.VideoEditor
 import com.example.galeria.features.editor.presentation.EditorScreen
 import com.example.galeria.features.gallery.domain.Album
 import com.example.galeria.features.gallery.domain.AlbumId
@@ -101,6 +103,7 @@ fun App() {
                 scanMedia = ScanMediaUseCase(mediaRepository),
                 mediaRepository = mediaRepository,
                 editImage = EditImageUseCase(ImageEditor()),
+                editVideo = EditVideoUseCase(VideoEditor()),
                 hideInVault = createHideInVault(),
                 permission = com.example.galeria.features.gallery.presentation.MediaPermission(),
                 shareMedia = ShareMediaUseCase(ShareSheet()),
