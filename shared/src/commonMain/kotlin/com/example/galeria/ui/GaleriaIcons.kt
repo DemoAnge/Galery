@@ -492,6 +492,55 @@ object GaleriaIcons {
         }
     }
 
+    val Stories: ImageVector by lazy {
+        strokeIcon("Stories") {
+            moveTo(12f, 4.6f)
+            arcToRelative(7.4f, 7.4f, 0f, true, true, 0f, 0.01f)
+            close()
+            moveTo(12f, 8.2f)
+            arcToRelative(3.8f, 3.8f, 0f, true, true, 0f, 0.01f)
+            close()
+        }
+    }
+
+    val Nearby: ImageVector by lazy {
+        strokeIcon("Nearby") {
+            moveTo(12f, 18.2f)
+            arcToRelative(1.1f, 1.1f, 0f, true, true, 0f, 0.01f)
+            close()
+            moveTo(8.4f, 14.4f)
+            arcToRelative(5.2f, 5.2f, 0f, false, true, 7.2f, 0f)
+            moveTo(5.8f, 11.4f)
+            arcToRelative(8.8f, 8.8f, 0f, false, true, 12.4f, 0f)
+            moveTo(3.4f, 8.4f)
+            arcToRelative(12.2f, 12.2f, 0f, false, true, 17.2f, 0f)
+        }
+    }
+
+    val Bluetooth: ImageVector by lazy {
+        strokeIcon("Bluetooth") {
+            moveTo(7f, 7.2f)
+            lineTo(16.5f, 16.2f)
+            lineTo(12f, 20.2f)
+            lineTo(12f, 3.8f)
+            lineTo(16.5f, 7.8f)
+            lineTo(7f, 16.8f)
+        }
+    }
+
+    val Chat: ImageVector by lazy {
+        strokeIcon("Chat") {
+            moveTo(5.5f, 6.5f)
+            lineTo(18.5f, 6.5f)
+            lineTo(18.5f, 15.2f)
+            lineTo(13.2f, 15.2f)
+            lineTo(8.8f, 18.8f)
+            lineTo(8.8f, 15.2f)
+            lineTo(5.5f, 15.2f)
+            close()
+        }
+    }
+
     val Vault: ImageVector get() = VaultFilled
     val Gallery: ImageVector get() = PhotosFilled
 }

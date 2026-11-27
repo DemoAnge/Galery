@@ -10,5 +10,12 @@
 	<string>Galeria necesita permiso para guardar en Fotos los elementos exportados del Vault.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Galeria usa Face ID solo como atajo para abrir el Vault. El PIN o patrón sigue siendo obligatorio.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>instagram-stories</string>
+		<string>instagram</string>
+		<string>facebook-stories</string>
+		<string>whatsapp</string>
+	</array>
 </dict>
 </plist>

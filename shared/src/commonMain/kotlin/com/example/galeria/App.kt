@@ -74,7 +74,9 @@ import com.example.galeria.features.gallery.presentation.SearchScreen
 import com.example.galeria.features.gallery.presentation.VIDEOS_COLLECTION_TITLE
 import com.example.galeria.features.gallery.presentation.VideosScreen
 import com.example.galeria.features.gallery.presentation.SelectionBar
+import com.example.galeria.features.gallery.presentation.sharePreviewItems
 import com.example.galeria.features.share.domain.ShareMediaUseCase
+import com.example.galeria.features.share.presentation.ShareDestinationsSheet
 import com.example.galeria.features.share.presentation.ShareSheet
 import com.example.galeria.features.vault.data.VaultComponent
 import com.example.galeria.features.vault.data.createHideInVault
@@ -308,6 +310,9 @@ fun App() {
         }
         AppBackHandler(enabled = ready?.editing != null) {
             galleryViewModel.closeEditor()
+        }
+        AppBackHandler(enabled = ready?.shareSession != null) {
+            galleryViewModel.closeShare()
         }
 
         AnimatedContent(
@@ -695,6 +700,18 @@ fun App() {
                 onCreateNew = { requestCreateAlbum(pendingAlbumIds) },
                 onDismiss = { resetAlbumFlow() },
             )
+        }
+        if (ready != null) {
+            val shareSession = ready.shareSession
+            if (shareSession != null) {
+                ShareDestinationsSheet(
+                    items = sharePreviewItems(ready),
+                    targets = shareSession.targets,
+                    hint = shareSession.hint,
+                    onShareTo = galleryViewModel::shareTo,
+                    onDismiss = galleryViewModel::closeShare,
+                )
+            }
         }
     }
 }

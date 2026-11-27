@@ -26,6 +26,7 @@ import com.example.galeria.features.gallery.domain.removingFrom
 import com.example.galeria.features.gallery.domain.renaming
 import com.example.galeria.features.gallery.domain.without
 import com.example.galeria.features.share.domain.ShareMediaUseCase
+import com.example.galeria.features.share.domain.ShareTarget
 import com.example.galeria.features.share.presentation.ShareRequest
 import kotlin.time.TimeSource
 import kotlinx.coroutines.Dispatchers
@@ -52,10 +53,18 @@ sealed class GalleryUiState {
         val message: String? = null,
         val busy: Boolean = false,
         val error: String? = null,
+        val shareSession: ShareSession? = null,
     ) : GalleryUiState() {
         val selecting: Boolean get() = selectedIds.isNotEmpty()
     }
 }
+
+data class ShareSession(
+    val itemIds: List<String>,
+    val requests: List<ShareRequest>,
+    val targets: List<ShareTarget>,
+    val hint: String? = null,
+)
 
 data class ViewerSession(
     val items: List<MediaItem>,
@@ -365,26 +374,55 @@ class GalleryViewModel(
 
     fun shareCurrent() {
         val viewing = ready()?.viewing ?: return
-        shareItems(listOf(viewing.item))
+        openShare(listOf(viewing.item))
     }
 
     fun shareSelected() {
         val ready = ready() ?: return
-        shareItems(selectedMedia(ready))
+        openShare(selectedMedia(ready))
     }
 
-    fun shareItems(items: List<MediaItem>) {
-        if (items.isEmpty()) return
-        val result = runCatching {
-            shareMedia(items.map { ShareRequest(it.publicUri, mimeType(it)) })
+    fun closeShare() {
+        updateReady { it.copy(shareSession = null) }
+    }
+
+    fun shareTo(target: ShareTarget) {
+        val session = ready()?.shareSession ?: return
+        if (!target.enabled) {
+            updateReady { it.copy(shareSession = session.copy(hint = target.reason)) }
+            return
         }
+        val result = runCatching { shareMedia.shareTo(session.requests, target) }
         if (result.isFailure) {
             updateReady { current ->
                 current.copy(
+                    shareSession = current.shareSession?.copy(hint = "No se pudo abrir ${target.label}"),
                     viewing = current.viewing?.copy(error = "Error al compartir"),
                     error = "Error al compartir",
                 )
             }
+        } else {
+            updateReady { it.copy(shareSession = null) }
+        }
+    }
+
+    fun shareItems(items: List<MediaItem>) {
+        openShare(items)
+    }
+
+    private fun openShare(items: List<MediaItem>) {
+        if (items.isEmpty()) return
+        val requests = items.map { ShareRequest(it.publicUri, mimeType(it)) }
+        val targets = runCatching { shareMedia.destinations(requests) }
+            .getOrElse { listOf(ShareTarget.MORE) }
+        updateReady {
+            it.copy(
+                shareSession = ShareSession(
+                    itemIds = items.map { item -> item.id },
+                    requests = requests,
+                    targets = targets,
+                ),
+            )
         }
     }
 
@@ -461,6 +499,7 @@ class GalleryViewModel(
                         viewing = viewing,
                         preview = viewing.image,
                     ),
+                    shareSession = null,
                 )
             }
             return
@@ -480,6 +519,7 @@ class GalleryViewModel(
             editorSource = bytes
             updateReady {
                 it.copy(
+                    shareSession = null,
                     editing = EditorSession(
                         item = viewing.item,
                         viewing = viewing,
@@ -756,6 +796,9 @@ class GalleryViewModel(
             editing = editing,
             userCollections = userCollections,
             message = prevReady?.message,
+            shareSession = prevReady?.shareSession?.takeIf { session ->
+                session.itemIds.all { it in available }
+            },
         )
     }
 
@@ -815,6 +858,15 @@ class GalleryViewModel(
         editorSource?.fill(0)
         editorSource = null
     }
+}
+
+internal fun sharePreviewItems(ready: GalleryUiState.Ready): List<MediaItem> {
+    val ids = ready.shareSession?.itemIds ?: return emptyList()
+    val byId = LinkedHashMap<String, MediaItem>()
+    ready.viewing?.items?.forEach { byId[it.id] = it }
+    ready.openedAlbum?.items?.forEach { byId.putIfAbsent(it.id, it) }
+    ready.allItems.forEach { byId.putIfAbsent(it.id, it) }
+    return ids.mapNotNull { byId[it] }
 }
 
 internal fun viewerAfterHide(session: ViewerSession?, movedIds: Set<String>): ViewerSession? {

@@ -33,6 +33,23 @@ class GalleryHideTest {
         assertNull(viewerAfterHide(session, setOf("a")))
     }
 
+    @Test
+    fun sharePreviewKeepsTheSelectedOrder() {
+        val a = photo("a")
+        val b = photo("b")
+        val ready = GalleryUiState.Ready(
+            albums = emptyList(),
+            allItems = listOf(b, a),
+            viewing = ViewerSession(items = listOf(a, b), index = 0),
+            shareSession = ShareSession(
+                itemIds = listOf("a", "b"),
+                requests = emptyList(),
+                targets = emptyList(),
+            ),
+        )
+        assertEquals(listOf("a", "b"), sharePreviewItems(ready).map { it.id })
+    }
+
     private fun photo(id: String): MediaItem = MediaItem(
         id = id,
         publicUri = "content://media/$id",
